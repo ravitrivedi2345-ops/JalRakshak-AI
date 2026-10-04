@@ -45,12 +45,15 @@ export function GuidedTour({
   }, [step]);
 
   useEffect(() => {
+    let animId: number;
+
     const update = () => {
       const target = document.querySelector<HTMLElement>(step.target);
       const viewportW = window.innerWidth;
       const viewportH = window.innerHeight;
       const PADDING = 16;
       const GAP = 16;
+      const margin = 10;
 
       const isMobile = viewportW <= 640;
       const cardWidth = Math.min(420, viewportW - PADDING * 2);
@@ -66,7 +69,7 @@ export function GuidedTour({
       }
 
       const rect = target.getBoundingClientRect();
-      const margin = 8;
+      // Bounding box of the spotlighted element
       const highlighted: Spotlight = {
         top: Math.max(PADDING, rect.top - margin),
         left: Math.max(PADDING, rect.left - margin),
@@ -76,73 +79,97 @@ export function GuidedTour({
       setSpotlight(highlighted);
 
       const cardEl = cardRef.current;
-      const cardHeight = cardEl ? cardEl.getBoundingClientRect().height : 360;
+      const cardHeight = cardEl ? cardEl.getBoundingClientRect().height : 340;
 
       let top = PADDING;
       let left = PADDING;
 
       if (isMobile) {
-        if (rect.top + rect.height / 2 < viewportH / 2) {
+        // Mobile layout: place card at top or bottom depending on target vertical center
+        const targetCenterY = highlighted.top + highlighted.height / 2;
+        if (targetCenterY < viewportH / 2) {
           top = viewportH - cardHeight - PADDING;
         } else {
           top = PADDING;
         }
         left = (viewportW - cardWidth) / 2;
       } else {
+        // Desktop layout: find non-overlapping quadrant
         const spaceRight = viewportW - (highlighted.left + highlighted.width + GAP);
         const spaceLeft = highlighted.left - GAP;
         const spaceBelow = viewportH - (highlighted.top + highlighted.height + GAP);
         const spaceAbove = highlighted.top - GAP;
 
         if (spaceRight >= cardWidth + PADDING) {
+          // Place to the Right
           left = highlighted.left + highlighted.width + GAP;
           top = highlighted.top + highlighted.height / 2 - cardHeight / 2;
         } else if (spaceLeft >= cardWidth + PADDING) {
+          // Place to the Left
           left = highlighted.left - cardWidth - GAP;
           top = highlighted.top + highlighted.height / 2 - cardHeight / 2;
         } else if (spaceBelow >= cardHeight + PADDING) {
+          // Place Below
           top = highlighted.top + highlighted.height + GAP;
           left = highlighted.left + highlighted.width / 2 - cardWidth / 2;
         } else if (spaceAbove >= cardHeight + PADDING) {
+          // Place Above
           top = highlighted.top - cardHeight - GAP;
           left = highlighted.left + highlighted.width / 2 - cardWidth / 2;
         } else {
-          top = (viewportH - cardHeight) / 2;
-          left = (viewportW - cardWidth) / 2;
+          // Fallback: Pick side with maximum space
+          if (spaceBelow >= spaceAbove && spaceBelow >= spaceRight && spaceBelow >= spaceLeft) {
+            top = highlighted.top + highlighted.height + GAP;
+            left = (viewportW - cardWidth) / 2;
+          } else if (spaceAbove >= spaceRight && spaceAbove >= spaceLeft) {
+            top = highlighted.top - cardHeight - GAP;
+            left = (viewportW - cardWidth) / 2;
+          } else if (spaceRight >= spaceLeft) {
+            left = highlighted.left + highlighted.width + GAP;
+            top = (viewportH - cardHeight) / 2;
+          } else {
+            left = highlighted.left - cardWidth - GAP;
+            top = (viewportH - cardHeight) / 2;
+          }
         }
       }
 
-      // Check if card overlaps the highlighted element
-      const overlaps =
-        left < highlighted.left + highlighted.width &&
-        left + cardWidth > highlighted.left &&
-        top < highlighted.top + highlighted.height &&
-        top + cardHeight > highlighted.top;
+      // Strict anti-overlap check: if card rectangle overlaps target rectangle, nudge it completely outside
+      const overlapsX = left < highlighted.left + highlighted.width && left + cardWidth > highlighted.left;
+      const overlapsY = top < highlighted.top + highlighted.height && top + cardHeight > highlighted.top;
 
-      if (overlaps) {
-        if (highlighted.top > cardHeight + GAP + PADDING) {
+      if (overlapsX && overlapsY) {
+        if (highlighted.top - cardHeight - GAP >= PADDING) {
           top = highlighted.top - cardHeight - GAP;
-        } else if (viewportH - (highlighted.top + highlighted.height) > cardHeight + GAP + PADDING) {
+        } else if (highlighted.top + highlighted.height + GAP + cardHeight <= viewportH - PADDING) {
           top = highlighted.top + highlighted.height + GAP;
+        } else if (highlighted.left - cardWidth - GAP >= PADDING) {
+          left = highlighted.left - cardWidth - GAP;
+        } else if (highlighted.left + highlighted.width + GAP + cardWidth <= viewportW - PADDING) {
+          left = highlighted.left + highlighted.width + GAP;
         }
       }
 
-      // Clamp strictly within visible viewport
+      // Clamp strictly within viewport
       top = Math.max(PADDING, Math.min(top, viewportH - cardHeight - PADDING));
       left = Math.max(PADDING, Math.min(left, viewportW - cardWidth - PADDING));
 
       setTip({ top, left, width: cardWidth });
     };
 
-    const animationFrame = window.requestAnimationFrame(update);
+    // Run continuous animation loop to smoothly track target during scroll, transition & tab rendering
+    const loop = () => {
+      update();
+      animId = window.requestAnimationFrame(loop);
+    };
+    animId = window.requestAnimationFrame(loop);
+
     window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
     window.addEventListener("orientationchange", update);
 
     return () => {
-      window.cancelAnimationFrame(animationFrame);
+      window.cancelAnimationFrame(animId);
       window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
       window.removeEventListener("orientationchange", update);
     };
   }, [step]);
