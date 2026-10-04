@@ -134,7 +134,7 @@ const sites: Site[] = [
     score: 82,
     reason: "Seasonal water spread needs a local field check",
     coordinates: [71.38, 25.75],
-    photo: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=560&q=82",
+    photo: "/images/barmer_farm_pond.jpg",
   },
   {
     id: "darrang",
@@ -145,7 +145,7 @@ const sites: Site[] = [
     score: 76,
     reason: "Recent field photo needs a site-location cross-check",
     coordinates: [92.02, 26.45],
-    photo: "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=560&q=82",
+    photo: "/images/darrang_check_dam.jpg",
   },
   {
     id: "kolar",
@@ -156,7 +156,7 @@ const sites: Site[] = [
     score: 91,
     reason: "Vegetation trend is above its illustrative seasonal baseline",
     coordinates: [78.13, 13.14],
-    photo: "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=560&q=82",
+    photo: "/images/kolar_plantation.jpg",
   },
   {
     id: "koraput",
@@ -167,7 +167,7 @@ const sites: Site[] = [
     score: 71,
     reason: "Exposed soil signal needs confirmation by a field team",
     coordinates: [82.72, 18.81],
-    photo: "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=560&q=82",
+    photo: "/images/barmer_farm_pond.jpg",
   },
   {
     id: "kangra",
@@ -178,7 +178,7 @@ const sites: Site[] = [
     score: 88,
     reason: "Spring recharge signal is within the seasonal range",
     coordinates: [76.27, 32.10],
-    photo: "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=560&q=82",
+    photo: "/images/kangra_spring_recharge.jpg",
   },
   {
     id: "chitrakoot",
@@ -189,7 +189,7 @@ const sites: Site[] = [
     score: 79,
     reason: "Water presence estimate differs from the last review",
     coordinates: [80.87, 25.20],
-    photo: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=560&q=82",
+    photo: "/images/barmer_farm_pond.jpg",
   },
   {
     id: "bastar",
@@ -200,7 +200,7 @@ const sites: Site[] = [
     score: 86,
     reason: "Vegetation recovery estimate is improving this season",
     coordinates: [81.95, 19.10],
-    photo: "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=560&q=82",
+    photo: "/images/kolar_plantation.jpg",
   },
   {
     id: "tirunelveli",
@@ -211,7 +211,7 @@ const sites: Site[] = [
     score: 73,
     reason: "Post-monsoon water extent needs field confirmation",
     coordinates: [77.70, 8.73],
-    photo: "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=560&q=82",
+    photo: "/images/darrang_check_dam.jpg",
   },
 ];
 
@@ -372,11 +372,11 @@ const interventionTypes = [
 ];
 
 const heroImage =
-  "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=2000&q=88";
+  "/images/sentinel2_monsoon_ndvi.jpg";
 const satelliteBefore =
-  "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1100&q=78";
+  "/images/sentinel2_dry_season.jpg";
 const satelliteAfter =
-  "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=1100&q=78";
+  "/images/sentinel2_monsoon_ndvi.jpg";
 const currentDateLabel = new Intl.DateTimeFormat("en-IN", {
   weekday: "long",
   day: "numeric",

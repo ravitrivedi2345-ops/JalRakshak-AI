@@ -39,7 +39,7 @@ def list_tasks(db: Session = Depends(get_db)):
     tasks = db.query(VerificationTaskModel).order_by(VerificationTaskModel.created_at.desc()).all()
     return create_success_response(data=[_serialize_task(t) for t in tasks])
 
-@router.post("")
+@router.post("", status_code=201)
 def create_task(payload: VerificationTaskCreate, db: Session = Depends(get_db)):
     task_id = f"task-{payload.site_id}"
     existing = db.query(VerificationTaskModel).filter_by(id=task_id).first()
