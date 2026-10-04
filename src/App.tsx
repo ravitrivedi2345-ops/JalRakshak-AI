@@ -551,6 +551,8 @@ function MapPanel({
         if (cancelled || !containerRef.current) return;
         setWorkerUrl(maplibreWorkerUrl);
 
+        const customMapStyle = import.meta.env.VITE_MAP_STYLE_URL || (import.meta.env.VITE_MAPTILER_KEY ? `https://api.maptiler.com/maps/streets-v2/style.json?key=${import.meta.env.VITE_MAPTILER_KEY}` : null);
+
         const map = new Map({
           container: containerRef.current,
           center: [82, 22],
@@ -558,7 +560,7 @@ function MapPanel({
           minZoom: 3,
           maxZoom: 15,
           attributionControl: false,
-          style: {
+          style: customMapStyle || {
             version: 8,
             sources: {
               osm: {
