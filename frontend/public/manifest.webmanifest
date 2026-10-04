@@ -1,0 +1,18 @@
+{
+  "name": "JalRakshak AI · Watershed Intelligence",
+  "short_name": "JalRakshak",
+  "description": "Offline-friendly watershed monitoring and field evidence workspace.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f3",
+  "theme_color": "#123b2c",
+  "icons": [
+    {
+      "src": "/icons/jalrakshak.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
