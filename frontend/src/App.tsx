@@ -563,6 +563,7 @@ function MapPanel({
   const mapboxSatelliteTile = mapboxToken ? `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}` : null;
   const mapboxStreetsTile = mapboxToken ? `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}` : null;
   const mapboxOutdoorsTile = mapboxToken ? `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}` : null;
+  const mapboxDarkTile = mapboxToken ? `https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}` : null;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -615,9 +616,9 @@ function MapPanel({
               },
               dark: {
                 type: "raster",
-                tiles: ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
+                tiles: mapboxDarkTile ? [mapboxDarkTile] : ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
                 tileSize: 256,
-                attribution: "&copy; CARTO &copy; OpenStreetMap",
+                attribution: mapboxDarkTile ? "© Mapbox Dark © OpenStreetMap" : "&copy; CARTO &copy; OpenStreetMap",
               }
             },
             layers: [
