@@ -84,7 +84,8 @@ async def upload_field_photo(
     return {
         "id": unique_name,
         "filename": original_name,
-        "status": "received"
+        "status": "received",
+        "url": f"/storage/uploads/{unique_name}"
     }
 
 @router.get("/images/{image_id}")

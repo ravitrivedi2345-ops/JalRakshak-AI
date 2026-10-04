@@ -85,12 +85,15 @@ type Site = {
   id: string;
   name: string;
   district: string;
+  state?: string;
   kind: string;
   status: "Needs verification" | "Monitoring" | "Verified";
   score: number;
   reason: string;
   coordinates: [number, number];
   photo: string;
+  areaHa?: number;
+  evidenceScore?: number;
 };
 
 type FieldRecord = {
@@ -98,6 +101,7 @@ type FieldRecord = {
   district: string;
   kind: string;
   photo: string;
+  photoUrl?: string;
   location: string;
   gpsCheck: string;
   notes: string;
@@ -213,6 +217,61 @@ const sites: Site[] = [
     coordinates: [77.70, 8.73],
     photo: "/images/darrang_check_dam.jpg",
   },
+  {
+    id: "nalegaon",
+    name: "IWMP-14-MW01 Nalegaon Micro-watershed",
+    district: "Nanded · Maharashtra",
+    kind: "Farm pond",
+    status: "Monitoring",
+    score: 85,
+    reason: "Sentinel-2 NDVI trend shows positive vegetation gain (+0.14 index)",
+    coordinates: [77.33, 19.12],
+    photo: "/images/barmer_farm_pond.jpg",
+  },
+  {
+    id: "dharmabad",
+    name: "IWMP-14-MW02 Dharmabad Micro-watershed",
+    district: "Nanded · Maharashtra",
+    kind: "Check dam",
+    status: "Needs verification",
+    score: 78,
+    reason: "Water spread anomaly detected — awaiting EXIF photo corroboration",
+    coordinates: [77.88, 18.89],
+    photo: "/images/darrang_check_dam.jpg",
+  },
+  {
+    id: "mukhed",
+    name: "IWMP-14-MW03 Mukhed Micro-watershed",
+    district: "Nanded · Maharashtra",
+    kind: "Erosion risk",
+    status: "Needs verification",
+    score: 62,
+    reason: "Critical vegetation degradation flagged by satellite cross-validation engine",
+    coordinates: [77.38, 18.67],
+    photo: "/images/barmer_farm_pond.jpg",
+  },
+  {
+    id: "ardhapur",
+    name: "IWMP-14-MW04 Ardhapur Micro-watershed",
+    district: "Nanded · Maharashtra",
+    kind: "Plantation",
+    status: "Monitoring",
+    score: 89,
+    reason: "CAMPA afforestation site verified with high field confidence",
+    coordinates: [77.34, 19.29],
+    photo: "/images/kolar_plantation.jpg",
+  },
+  {
+    id: "biloli",
+    name: "IWMP-14-MW05 Biloli Micro-watershed",
+    district: "Nanded · Maharashtra",
+    kind: "Farm pond",
+    status: "Verified",
+    score: 94,
+    reason: "Excellent WII impact score (94/100) corroborated by ground evidence",
+    coordinates: [77.75, 18.73],
+    photo: "/images/barmer_farm_pond.jpg",
+  },
 ];
 
 export type LayerCategory =
@@ -293,6 +352,7 @@ export const watershedRegions: WatershedRegion[] = [
   { id: "mandakini", name: "Mandakini Sub-basin", state: "Uttar Pradesh", district: "Chitrakoot", center: [80.87, 25.20], bounds: [[80.1, 24.6], [81.5, 25.8]], areaSqKm: 890.3 },
   { id: "indravati", name: "Indravati Basin", state: "Chhattisgarh", district: "Bastar", center: [81.95, 19.10], bounds: [[81.2, 18.5], [82.6, 19.7]], areaSqKm: 1630.7 },
   { id: "thamirabarani", name: "Thamirabarani Basin", state: "Tamil Nadu", district: "Tirunelveli", center: [77.70, 8.73], bounds: [[77.0, 8.2], [78.2, 9.2]], areaSqKm: 940.6 },
+  { id: "nanded", name: "Nanded District IWMP-14", state: "Maharashtra", district: "Nanded", center: [77.40, 19.00], bounds: [[76.8, 18.4], [78.1, 19.6]], areaSqKm: 1050.0 },
 ];
 
 export function exportGeoJSON(sitesList: Site[]) {
@@ -452,6 +512,136 @@ function DeferredDemoChart({ data }: { data: { month: string; ndvi: number; ndwi
   );
 }
 
+export type BackendHealthState = {
+  status: "loading" | "connected" | "degraded" | "disconnected" | "demo";
+  details?: {
+    url: string;
+    app_name?: string;
+    database?: string;
+    satellite_provider?: string;
+    ai_detector?: string;
+    gemini?: any;
+    error?: string;
+  };
+};
+
+function BackendStatusIndicator({
+  health,
+  onRetry,
+}: {
+  health: BackendHealthState;
+  onRetry: () => void;
+}) {
+  const [showDetails, setShowDetails] = useState(false);
+
+  const getBadgeConfig = () => {
+    switch (health.status) {
+      case "connected":
+        return {
+          label: "Backend Connected",
+          dotClass: "dot-connected",
+          badgeClass: "badge-connected",
+        };
+      case "degraded":
+        return {
+          label: "Backend Degraded",
+          dotClass: "dot-degraded",
+          badgeClass: "badge-degraded",
+        };
+      case "disconnected":
+        return {
+          label: "Backend Offline",
+          dotClass: "dot-disconnected",
+          badgeClass: "badge-disconnected",
+        };
+      case "loading":
+        return {
+          label: "Checking Backend...",
+          dotClass: "dot-loading",
+          badgeClass: "badge-loading",
+        };
+      case "demo":
+      default:
+        return {
+          label: "Interactive Demo Mode",
+          dotClass: "dot-demo",
+          badgeClass: "badge-demo",
+        };
+    }
+  };
+
+  const badge = getBadgeConfig();
+
+  return (
+    <div className="slim-status-wrapper">
+      <div className={`slim-status-pill ${badge.badgeClass}`}>
+        <span className={`status-dot ${badge.dotClass}`} />
+        <span className="status-label">{badge.label}</span>
+        <button
+          type="button"
+          className="status-info-trigger"
+          onClick={() => setShowDetails(!showDetails)}
+          title="View backend connection & API details"
+          aria-label="View backend details"
+        >
+          <CircleHelp size={14} />
+        </button>
+      </div>
+
+      {showDetails && (
+        <div className="status-details-popover">
+          <div className="status-details-header">
+            <strong>System Connection Status</strong>
+            <button type="button" className="status-close-btn" onClick={() => setShowDetails(false)} aria-label="Close details">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="status-details-body">
+            <div className="status-detail-row">
+              <span>Endpoint:</span>
+              <code>{health.details?.url || "http://localhost:8000"}</code>
+            </div>
+            {health.status === "demo" ? (
+              <p className="status-detail-note" style={{ margin: "8px 0 0", color: "#64748b", fontSize: "12px" }}>
+                Running in client demo mode with sample watershed data.
+              </p>
+            ) : health.status === "disconnected" ? (
+              <div className="status-error-box">
+                <p style={{ margin: 0, fontWeight: 600 }}>FastAPI Backend Server Offline</p>
+                <small style={{ display: "block", marginTop: "4px" }}>{health.details?.error || "Connection refused"}</small>
+                <button type="button" className="retry-btn" onClick={onRetry}>
+                  <RefreshCw size={12} /> Retry Connection
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="status-detail-row">
+                  <span>Database:</span>
+                  <strong className={health.details?.database === "connected" ? "text-green" : "text-amber"}>
+                    {health.details?.database || "Checking..."}
+                  </strong>
+                </div>
+                {health.details?.satellite_provider && (
+                  <div className="status-detail-row">
+                    <span>Satellite Provider:</span>
+                    <strong>{health.details.satellite_provider}</strong>
+                  </div>
+                )}
+                {health.details?.ai_detector && (
+                  <div className="status-detail-row">
+                    <span>AI Detector:</span>
+                    <strong>{health.details.ai_detector}</strong>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Sidebar({
   active,
   onNavigate,
@@ -544,7 +734,7 @@ function MapPanel({
   const markerInstances = useRef<MapLibreMarker[]>([]);
   const uploadMarkerRef = useRef<MapLibreMarker | null>(null);
   const addUploadMarkerRef = useRef<((coordinates: [number, number]) => MapLibreMarker) | null>(null);
-  const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("ready");
   const [fallbackZoom, setFallbackZoom] = useState(1);
   const [basemap, setBasemap] = useState<"osm" | "satellite" | "topo" | "dark">("osm");
   const [pitch, setPitch] = useState<0 | 45>(0);
@@ -799,6 +989,14 @@ function MapPanel({
     mapRef.current?.fitBounds(region.bounds, { padding: 40, duration: 900 });
   };
 
+  useEffect(() => {
+    if (!mapRef.current || !selectedWatershedId || selectedWatershedId === "All") return;
+    const region = watershedRegions.find((w) => w.id === selectedWatershedId);
+    if (region) {
+      mapRef.current.fitBounds(region.bounds, { padding: 40, duration: 900 });
+    }
+  }, [selectedWatershedId]);
+
   const handleExportGeoJSON = () => {
     const geojson = {
       type: "FeatureCollection",
@@ -809,10 +1007,10 @@ function MapPanel({
           name: s.name,
           kind: s.kind,
           district: s.district,
-          state: s.state,
+          state: s.state || s.district.split("·")[1]?.trim() || "State",
           status: s.status,
-          area_ha: s.areaHa,
-          evidence_score: s.evidenceScore,
+          area_ha: s.areaHa ?? 100,
+          evidence_score: s.evidenceScore ?? s.score,
         },
         geometry: {
           type: "Point",
@@ -832,7 +1030,7 @@ function MapPanel({
   const handleExportCSV = () => {
     const headers = "ID,Name,Kind,District,State,Status,Latitude,Longitude,Area_ha,EvidenceScore\n";
     const rows = sites
-      .map((s) => `"${s.id}","${s.name}","${s.kind}","${s.district}","${s.state}","${s.status}",${s.coordinates[1]},${s.coordinates[0]},${s.areaHa},${s.evidenceScore}`)
+      .map((s) => `"${s.id}","${s.name}","${s.kind}","${s.district}","${s.state || s.district.split("·")[1]?.trim() || "State"}","${s.status}",${s.coordinates[1]},${s.coordinates[0]},${s.areaHa ?? 100},${s.evidenceScore ?? s.score}`)
       .join("\n");
     const blob = new Blob([headers + rows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -1118,6 +1316,15 @@ function PhotoModal({
   onClose: () => void;
   onZoomToMap?: () => void;
 }) {
+  const handleDownload = () => {
+    const link = document.createElement("a");
+    link.href = photo.url;
+    link.download = photo.name || "field_photo.jpg";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="photo-modal-backdrop" onClick={onClose}>
       <div className="photo-modal-card" onClick={(e) => e.stopPropagation()}>
@@ -1135,7 +1342,10 @@ function PhotoModal({
           <div><strong>Validation Discrepancy Check:</strong> <span style={{ color: photo.gpsCheck.includes("500 m") || photo.gpsCheck.includes("good") ? "#166534" : "#b45309" }}>{photo.gpsCheck}</span></div>
           {photo.notes && <div><strong>Field Notes:</strong> {photo.notes}</div>}
         </div>
-        <div style={{ marginTop: "16px", display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+        <div style={{ marginTop: "16px", display: "flex", gap: "10px", justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <button className="export-btn" style={{ background: "#28764e", color: "white" }} onClick={handleDownload}>
+            <Download size={15} /> Save / Download Image to Desktop
+          </button>
           {onZoomToMap && (
             <button className="export-btn" onClick={onZoomToMap}>
               <LocateFixed size={15} /> Zoom Map to Photo Coordinates
@@ -1154,6 +1364,14 @@ function App() {
   const [active, setActive] = useState("Overview");
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mode, setMode] = useState<OperationMode>(() => {
+    const saved = localStorage.getItem("jalrakshak-mode");
+    return saved === "connected" ? "connected" : "demo";
+  });
+  const [backendHealth, setBackendHealth] = useState<BackendHealthState>({
+    status: mode === "demo" ? "demo" : "loading",
+    details: { url: getApiBaseUrl() }
+  });
   const [search, setSearch] = useState("");
   const [siteTypeFilter, setSiteTypeFilter] = useState("All intervention types");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -1182,7 +1400,7 @@ function App() {
   const [savedFieldRecords, setSavedFieldRecords] = useState<FieldRecord[]>([]);
   const [gisLayers, setGisLayers] = useState<LayerItemDef[]>(initialLayers);
   const [selectedStateFilter, setSelectedStateFilter] = useState("All");
-  const [selectedWatershedFilter, setSelectedWatershedFilter] = useState("luni");
+  const [selectedWatershedFilter, setSelectedWatershedFilter] = useState("All");
   const [selectedVerificationStatusFilter, setSelectedVerificationStatusFilter] = useState("All");
   const [selectedQualityFilter, setSelectedQualityFilter] = useState("All");
   const [activeDetailTab, setActiveDetailTab] = useState<"overview" | "photos" | "satellite" | "change" | "verification" | "reports">("overview");
@@ -1201,7 +1419,6 @@ function App() {
       prev.map((l) => (l.id === id ? { ...l, defaultOpacity: opacity } : l))
     );
   };
-  const [mode, setMode] = useState<OperationMode>(() => localStorage.getItem("jalrakshak-mode") === "demo" ? "demo" : "connected");
   const [dynamicMetrics, setDynamicMetrics] = useState(metricCards);
   const [dynamicIndexSeries, setDynamicIndexSeries] = useState(demoIndexSeries);
   const [dynamicSites, setDynamicSites] = useState<Site[]>(sites);
@@ -1314,9 +1531,52 @@ function App() {
     setVerificationObservation(savedTask?.observation ?? "");
   }, [demoTasks, selectedSite]);
 
+  const checkBackendHealth = useCallback(async () => {
+    if (mode === "demo") {
+      setBackendHealth({ status: "demo", details: { url: getApiBaseUrl() } });
+      return;
+    }
+    setBackendHealth((prev) => ({ ...prev, status: "loading" }));
+    try {
+      const healthRes = await checkHealth();
+      if (healthRes && (healthRes.success || healthRes.data)) {
+        const data = healthRes.data || healthRes;
+        const isHealthy = data.status === "healthy" || data.database === "connected";
+        setBackendHealth({
+          status: isHealthy ? "connected" : "degraded",
+          details: {
+            url: getApiBaseUrl(),
+            app_name: data.app_name,
+            database: data.database || (isHealthy ? "connected" : "unhealthy"),
+            satellite_provider: data.satellite_provider,
+            ai_detector: data.ai_detector,
+            gemini: data.gemini,
+          }
+        });
+      } else {
+        setBackendHealth({
+          status: "degraded",
+          details: {
+            url: getApiBaseUrl(),
+            error: healthRes?.message || "Service degraded"
+          }
+        });
+      }
+    } catch (err) {
+      setBackendHealth({
+        status: "disconnected",
+        details: {
+          url: getApiBaseUrl(),
+          error: parseApiError(err)
+        }
+      });
+    }
+  }, [mode]);
+
   useEffect(() => {
     let isMounted = true;
     const initBackend = async () => {
+      void checkBackendHealth();
       try {
         const summary = await fetchDashboardSummary();
         if (isMounted && summary?.kpis) {
@@ -1362,17 +1622,21 @@ function App() {
           const statuses: Record<string, DemoVerificationStatus> = {};
           const tasksObj: Record<string, DemoVerificationTask> = {};
           const assignedList: string[] = [];
-          tasks.forEach((t: { site_id: string; officer?: string; due_date?: string; status: DemoVerificationStatus; observation?: string; attachments?: string[]; history?: { status: DemoVerificationStatus; at: string }[] }) => {
+          tasks.forEach((t) => {
             if (t.site_id) {
-              statuses[t.site_id] = t.status;
+              const validStatus = (t.status as DemoVerificationStatus) || "assigned";
+              statuses[t.site_id] = validStatus;
               assignedList.push(t.site_id);
               tasksObj[t.site_id] = {
                 officer: t.officer || "Ravi Trivedi",
                 dueDate: t.due_date || "",
-                status: t.status,
+                status: validStatus,
                 observation: t.observation || "",
                 attachments: t.attachments || [],
-                history: t.history || []
+                history: (t.history || []).map((h) => ({
+                  status: (h.status as DemoVerificationStatus) || "assigned",
+                  at: h.at
+                }))
               };
             }
           });
@@ -1397,7 +1661,18 @@ function App() {
       try {
         const res = await searchBackend(search.trim());
         if (res && Array.isArray(res.sites)) {
-          setBackendSearchResults(res.sites);
+          const mappedSites: Site[] = res.sites.map((s) => ({
+            id: s.id,
+            name: s.name,
+            district: s.district,
+            kind: s.kind,
+            status: (s.status as Site["status"]) || "Needs verification",
+            score: s.score,
+            reason: s.reason,
+            coordinates: s.coordinates,
+            photo: s.photo
+          }));
+          setBackendSearchResults(mappedSites);
         }
       } catch (e) {
         console.warn("Backend search notice:", e);
@@ -1436,14 +1711,24 @@ function App() {
   const visibleSites = activeSites.filter((site) => {
     const matchesSearch = `${site.id} ${site.name} ${site.district} ${site.kind} ${site.reason}`.toLowerCase().includes(search.toLowerCase());
     const matchesKind = siteTypeFilter === "All intervention types" || site.kind === siteTypeFilter;
-    const matchesState = selectedStateFilter === "All" || site.district.includes(selectedStateFilter);
+    const matchesState = selectedStateFilter === "All" || site.district.toLowerCase().includes(selectedStateFilter.toLowerCase());
     const matchesStatus = selectedVerificationStatusFilter === "All" || site.status === selectedVerificationStatusFilter;
+    
+    let matchesWatershed = true;
+    if (selectedWatershedFilter && selectedWatershedFilter !== "All") {
+      const selectedRegion = watershedRegions.find((w) => w.id === selectedWatershedFilter);
+      if (selectedRegion) {
+        matchesWatershed = site.district.toLowerCase().includes(selectedRegion.district.toLowerCase()) ||
+                           site.district.toLowerCase().includes(selectedRegion.state.toLowerCase());
+      }
+    }
+
     let matchesQuality = true;
     if (selectedQualityFilter === "High (>80%)") matchesQuality = site.score >= 80;
     else if (selectedQualityFilter === "Moderate (50-80%)") matchesQuality = site.score >= 50 && site.score < 80;
     else if (selectedQualityFilter === "Low (<50%)") matchesQuality = site.score < 50;
 
-    return matchesSearch && matchesKind && matchesState && matchesStatus && matchesQuality;
+    return matchesSearch && matchesKind && matchesState && matchesWatershed && matchesStatus && matchesQuality;
   });
   const selectedSiteReport = reportScope === `Selected site · ${currentSite.name}`;
   const reportSites = selectedSiteReport
@@ -1482,8 +1767,12 @@ function App() {
       event.currentTarget.value = "";
       return;
     }
-    const preview = URL.createObjectURL(file);
-    setUploadedPhoto({ name: file.name, preview });
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setUploadedPhoto({ name: file.name, preview: dataUrl });
+    };
+    reader.readAsDataURL(file);
     setSelectedFile(file);
     setAnalysisCoordinates(null);
     setAnalysisPhotoId(null);
@@ -1671,12 +1960,14 @@ function App() {
         });
         connectedId = uploaded.id;
       }
+      const photoDataUrl = uploadedPhoto.preview;
       const records: FieldRecord[] = [...savedFieldRecords];
       records.unshift({
         site: currentSite.name,
         district: currentSite.district,
         kind: currentSite.kind,
         photo: uploadedPhoto.name,
+        photoUrl: photoDataUrl,
         location: uploadLocation,
         gpsCheck: gpsDistanceMeters === null ? "GPS not captured" : `${gpsDistanceMeters} m from site reference`,
         notes: uploadNotes.trim(),
@@ -1685,6 +1976,9 @@ function App() {
       const nextRecords = records.slice(0, 30);
       localStorage.setItem("jalrakshak-field-records", JSON.stringify(nextRecords));
       setSavedFieldRecords(nextRecords);
+      setDynamicSites((prev) =>
+        prev.map((s) => (s.id === currentSite.id ? { ...s, photo: photoDataUrl } : s))
+      );
       setUploadWizardOpen(false);
       setUploadMessage("Field record uploaded to backend successfully.");
       setAnalysisPhotoId(connectedId || `photo-${currentSite.id}-${Date.now()}`);
@@ -2055,16 +2349,14 @@ function App() {
           <section className="welcome-row">
             <div>
               <p className="section-overline">{currentDateLabel} <span className="overline-line" /> <span className="freshness"><i /> Illustrative monitoring data</span></p>
-              <h2>Good morning, Ravi <span className="wave-emoji">☀</span></h2>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", marginTop: "4px" }}>
+                <h2 style={{ margin: 0 }}>Good morning, Ravi <span className="wave-emoji">☀</span></h2>
+                <BackendStatusIndicator health={backendHealth} onRetry={checkBackendHealth} />
+              </div>
               <p className="welcome-copy">Here’s the latest picture across your watershed program.</p>
             </div>
             <button className="report-button" onClick={() => setReportOpen(true)}><FileDown size={17} /> Build report</button>
           </section>
-
-          <div className={`mode-notice ${mode === "connected" ? "mode-notice-connected" : ""}`} role="status">
-            <strong>{mode === "demo" ? "INTERACTIVE DEMO · DEMO DATA" : "CONNECTED TO FASTAPI BACKEND (http://localhost:8000)"}</strong>
-            <span>{mode === "demo" ? "All example sites, sample statistics, simulated detections and sample satellite visuals are demonstrations." : "Live APIs connected for Photo Uploads, AI YOLO Inference, Field Verification Tasks, PDF Reports, Global Search, and Notifications."}</span>
-          </div>
 
           <section className="metrics-grid" data-tour="metrics" aria-label="Watershed key indicators">
             {dynamicMetrics.map((metric, index) => {
@@ -2107,6 +2399,7 @@ function App() {
               <option value="Uttar Pradesh">Uttar Pradesh</option>
               <option value="Chhattisgarh">Chhattisgarh</option>
               <option value="Tamil Nadu">Tamil Nadu</option>
+              <option value="Maharashtra">Maharashtra</option>
             </select>
 
             <select
@@ -2115,6 +2408,7 @@ function App() {
               onChange={(e) => setSelectedWatershedFilter(e.target.value)}
               aria-label="Filter by Watershed"
             >
+              <option value="All">Watershed: All Sub-basins</option>
               {watershedRegions.map((w) => (
                 <option key={w.id} value={w.id}>Watershed: {w.name}</option>
               ))}
@@ -2131,8 +2425,6 @@ function App() {
               <option value="Farm pond">Farm Pond</option>
               <option value="Plantation">Plantation</option>
               <option value="Erosion risk">Erosion Risk</option>
-              <option value="Percolation tank">Percolation Tank</option>
-              <option value="Recharge structure">Recharge Structure</option>
             </select>
 
             <select
@@ -2159,12 +2451,13 @@ function App() {
               <option value="Low (<50%)">Low Quality (&lt;50%)</option>
             </select>
 
-            {(selectedStateFilter !== "All" || siteTypeFilter !== "All intervention types" || selectedVerificationStatusFilter !== "All" || selectedQualityFilter !== "All" || search !== "") && (
+            {(selectedStateFilter !== "All" || selectedWatershedFilter !== "All" || siteTypeFilter !== "All intervention types" || selectedVerificationStatusFilter !== "All" || selectedQualityFilter !== "All" || search !== "") && (
               <button
                 className="map-btn-sm"
                 style={{ background: "#eef7f0", color: "#1e6538" }}
                 onClick={() => {
                   setSelectedStateFilter("All");
+                  setSelectedWatershedFilter("All");
                   setSiteTypeFilter("All intervention types");
                   setSelectedVerificationStatusFilter("All");
                   setSelectedQualityFilter("All");
@@ -2351,14 +2644,14 @@ function App() {
                         className="photo-card"
                         onClick={() => setViewingPhotoModal({
                           name: rec.photo,
-                          url: currentSite.photo,
+                          url: rec.photoUrl || currentSite.photo,
                           date: new Date(rec.capturedAt).toLocaleDateString("en-IN"),
                           location: rec.location,
                           gpsCheck: rec.gpsCheck,
                           notes: rec.notes,
                         })}
                       >
-                        <img src={currentSite.photo} alt={rec.photo} />
+                        <img src={rec.photoUrl || currentSite.photo} alt={rec.photo} />
                         <span className="photo-class"><Image size={12} /> Saved Record</span>
                         <span className="photo-caption"><strong>{rec.photo}</strong><small>{rec.location}</small></span>
                       </button>
@@ -2555,114 +2848,7 @@ function App() {
               </div>
             </article>
 
-            {/* SIH 26015 SYSTEM ARCHITECTURE PIPELINE */}
-            <article className="panel workflow-panel" id="architecture-pipeline">
-              <div className="panel-heading">
-                <div>
-                  <span className="section-overline">SIH 26015 ARCHITECTURE FLOWCHART</span>
-                  <h2>JalRakshak AI — End-to-End Operational Pipeline</h2>
-                  <p>Click any node in the pipeline flowchart to jump directly to its active workspace.</p>
-                </div>
-                <span className="workflow-badge"><Sparkles size={14} /> SIH 26015 Solution</span>
-              </div>
 
-              <div style={{ background: "#123b2c", borderRadius: "14px", padding: "20px", color: "white" }}>
-                <div style={{ textAlign: "center", marginBottom: "16px" }}>
-                  <strong style={{ fontSize: "18px", color: "#86d795", letterSpacing: "1px" }}>JALRAKSHAK AI · SIH 26015</strong>
-                  <div style={{ fontSize: "12.5px", color: "#a3c7ad" }}>Geospatial Watershed Monitoring & Assessment Platform</div>
-                </div>
-
-                {/* Stage 1: Dual Input Branches */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "12px" }}>
-                  {/* Branch A: Map Explorer */}
-                  <div
-                    style={{ background: "#ffffff12", border: "1px solid #ffffff30", borderRadius: "10px", padding: "12px", cursor: "pointer" }}
-                    onClick={() => { setActiveDetailTab("overview"); document.getElementById("map-explorer")?.scrollIntoView({ behavior: "smooth" }); }}
-                  >
-                    <div style={{ fontWeight: 800, color: "#86d795", fontSize: "13.5px", marginBottom: "6px" }}>🗺 MAP EXPLORER</div>
-                    <ul style={{ margin: 0, paddingLeft: "18px", fontSize: "12px", color: "#d1e7d6", display: "grid", gap: "3px" }}>
-                      <li>Watershed boundaries</li>
-                      <li>Rivers / drainage network</li>
-                      <li>Water bodies (reservoirs, ponds)</li>
-                      <li>Check dams</li>
-                      <li>Farm ponds</li>
-                      <li>Plantation</li>
-                    </ul>
-                  </div>
-
-                  {/* Branch B: Field Evidence */}
-                  <div
-                    style={{ background: "#ffffff12", border: "1px solid #ffffff30", borderRadius: "10px", padding: "12px", cursor: "pointer" }}
-                    onClick={() => { setActiveDetailTab("photos"); openUploadWizard(); }}
-                  >
-                    <div style={{ fontWeight: 800, color: "#93c5fd", fontSize: "13.5px", marginBottom: "6px" }}>📸 FIELD EVIDENCE</div>
-                    <ul style={{ margin: 0, paddingLeft: "18px", fontSize: "12px", color: "#d1e7d6", display: "grid", gap: "3px" }}>
-                      <li>Upload photo</li>
-                      <li>EXIF GPS extraction</li>
-                      <li>Manual location fallback</li>
-                      <li>Field notes</li>
-                      <li>Intervention type</li>
-                    </ul>
-                  </div>
-                </div>
-
-                {/* Down Arrow */}
-                <div style={{ textAlign: "center", fontSize: "16px", color: "#86d795", margin: "4px 0" }}>│<br />▼</div>
-
-                {/* Stage 2: Satellite Analysis */}
-                <div
-                  style={{ background: "#ffffff18", border: "1px solid #ffffff40", borderRadius: "10px", padding: "12px", textAlign: "center", cursor: "pointer" }}
-                  onClick={() => { setActiveDetailTab("satellite"); document.getElementById("map-explorer")?.scrollIntoView({ behavior: "smooth" }); }}
-                >
-                  <strong style={{ fontSize: "14.5px", color: "#fef08a" }}>🛰 SATELLITE ANALYSIS</strong>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginTop: "8px" }}>
-                    <div style={{ background: "#ffffff15", padding: "6px", borderRadius: "6px", fontSize: "12px" }}>
-                      <strong style={{ color: "#fef08a" }}>LULC</strong>
-                      <div style={{ fontSize: "10.5px", color: "#cbd5e1" }}>Land Use / Cover</div>
-                    </div>
-                    <div style={{ background: "#ffffff15", padding: "6px", borderRadius: "6px", fontSize: "12px" }}>
-                      <strong style={{ color: "#86efac" }}>NDVI</strong>
-                      <div style={{ fontSize: "10.5px", color: "#cbd5e1" }}>(NIR-Red)/(NIR+Red)</div>
-                    </div>
-                    <div style={{ background: "#ffffff15", padding: "6px", borderRadius: "6px", fontSize: "12px" }}>
-                      <strong style={{ color: "#7dd3fc" }}>NDWI</strong>
-                      <div style={{ fontSize: "10.5px", color: "#cbd5e1" }}>(Green-NIR)/(Green+NIR)</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Down Arrow */}
-                <div style={{ textAlign: "center", fontSize: "16px", color: "#86d795", margin: "4px 0" }}>│<br />▼</div>
-
-                {/* Stage 3: Sequential Processing Pipeline */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
-                  <div
-                    style={{ background: "#ffffff12", border: "1px solid #ffffff25", borderRadius: "8px", padding: "8px", textAlign: "center", cursor: "pointer" }}
-                    onClick={() => { setActiveDetailTab("change"); document.getElementById("map-explorer")?.scrollIntoView({ behavior: "smooth" }); }}
-                  >
-                    <strong style={{ display: "block", fontSize: "12px", color: "#fdba74" }}>BEFORE / AFTER CHANGE DETECTION</strong>
-                  </div>
-                  <div
-                    style={{ background: "#ffffff12", border: "1px solid #ffffff25", borderRadius: "8px", padding: "8px", textAlign: "center", cursor: "pointer" }}
-                    onClick={() => { setActiveDetailTab("overview"); document.getElementById("map-explorer")?.scrollIntoView({ behavior: "smooth" }); }}
-                  >
-                    <strong style={{ display: "block", fontSize: "12px", color: "#fef08a" }}>EVIDENCE ASSESSMENT</strong>
-                  </div>
-                  <div
-                    style={{ background: "#ffffff12", border: "1px solid #ffffff25", borderRadius: "8px", padding: "8px", textAlign: "center", cursor: "pointer" }}
-                    onClick={() => { setActiveDetailTab("verification"); document.getElementById("map-explorer")?.scrollIntoView({ behavior: "smooth" }); }}
-                  >
-                    <strong style={{ display: "block", fontSize: "12px", color: "#86d795" }}>FIELD VERIFICATION</strong>
-                  </div>
-                  <div
-                    style={{ background: "#ffffff12", border: "1px solid #ffffff25", borderRadius: "8px", padding: "8px", textAlign: "center", cursor: "pointer" }}
-                    onClick={() => { setActiveDetailTab("reports"); setReportOpen(true); }}
-                  >
-                    <strong style={{ display: "block", fontSize: "12px", color: "#cbd5e1" }}>REPORTS & EXPORT</strong>
-                  </div>
-                </div>
-              </div>
-            </article>
           </section>
 
           <section className="dashboard-grid field-grid">
@@ -2672,7 +2858,7 @@ function App() {
                 <button className="text-action" onClick={openUploadWizard}>Add photo <Plus size={16} /></button>
               </div>
               <div className="photo-grid" data-tour="photo-marker">
-                {sites.map((site) => (
+                {sites.slice(0, 2).map((site) => (
                   <button key={site.id} className={`photo-card ${selectedSite === site.id ? "photo-selected" : ""}`} onClick={() => setSelectedSite(site.id)}>
                     <img src={site.photo} alt={`${site.kind} field photo in ${site.district}`} loading="lazy" />
                     <span className="photo-class"><ScanLine size={12} /> {site.kind}</span>
@@ -2683,7 +2869,11 @@ function App() {
               <div className="offline-records">
                 <div><strong>Saved on this device</strong><span>{savedFieldRecords.length} field {savedFieldRecords.length === 1 ? "record" : "records"} · available offline</span></div>
                 {savedFieldRecords.length ? savedFieldRecords.slice(0, 3).map((record, index) => (
-                  <p key={`${record.capturedAt}-${index}`}><MapPin size={13} /><span><strong>{record.site}</strong><small>{record.kind} · {record.gpsCheck} · {new Date(record.capturedAt).toLocaleDateString("en-IN")}</small></span></p>
+                  <p key={`${record.capturedAt}-${index}`} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {record.photoUrl && <img src={record.photoUrl} alt={record.photo} style={{ width: "36px", height: "36px", borderRadius: "6px", objectFit: "cover", flexShrink: 0 }} />}
+                    <MapPin size={13} />
+                    <span><strong>{record.site} ({record.photo})</strong><small>{record.kind} · {record.gpsCheck} · {new Date(record.capturedAt).toLocaleDateString("en-IN")}</small></span>
+                  </p>
                 )) : <small>No local field records yet.</small>}
               </div>
             </article>
@@ -2712,12 +2902,12 @@ function App() {
           <section className="dashboard-grid queue-grid">
             <article className="panel verification-panel">
               <div className="panel-heading">
-                <div><span className="section-overline">ACTION REQUIRED</span><h2>Priority verification queue</h2><p>{visibleSites.length} sites matching your view · Evidence explains why each needs attention</p></div>
+                <div><span className="section-overline">ACTION REQUIRED</span><h2>Priority verification queue</h2><p>{visibleSites.filter((site) => site.status === "Needs verification").slice(0, 3).length} priority sample sites · Evidence explains why each needs attention</p></div>
                 <button className="text-action" onClick={() => setSearch("")}>View all <ArrowRight size={15} /></button>
               </div>
-              {visibleSites.length > 0 ? (
+              {visibleSites.filter((site) => site.status === "Needs verification").length > 0 ? (
                 <div className="verification-list">
-                  {visibleSites.map((site) => (
+                  {visibleSites.filter((site) => site.status === "Needs verification").slice(0, 3).map((site) => (
                     <button className={`verification-row ${selectedSite === site.id ? "row-selected" : ""}`} key={site.id} onClick={() => setSelectedSite(site.id)}>
                       <img src={site.photo} alt="" loading="lazy" />
                       <span className="verification-main"><strong>{site.name}</strong><small>{site.district} · {site.kind}</small></span>
@@ -2728,7 +2918,7 @@ function App() {
                     </button>
                   ))}
                 </div>
-              ) : <div className="empty-state"><Search size={20} /><strong>No sites found</strong><span>Try a different site name or district.</span></div>}
+              ) : <div className="empty-state"><Search size={20} /><strong>No sites needing verification found</strong><span>Try a different filter or search.</span></div>}
             </article>
 
             <article className="panel landuse-panel">

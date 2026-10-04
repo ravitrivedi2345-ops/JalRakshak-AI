@@ -138,9 +138,95 @@ img { display: block; max-width: 100%; }
 .welcome-copy { margin-top: 4px; color: #75847a; font-size: 15px; }
 .report-button { height: 39px; padding-inline: 13px; }
 
-.metrics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
+/* SLIM BACKEND STATUS BADGE & DETAILS POPOVER */
+.slim-status-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.slim-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px;
+  border-radius: 20px;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+.badge-connected { background: #edf7ee; border-color: #c4ebd0; color: #1b5e35; }
+.badge-degraded { background: #fff8eb; border-color: #ffe4b5; color: #a05e03; }
+.badge-disconnected { background: #fdf2f2; border-color: #f8cece; color: #9c2a2a; }
+.badge-loading { background: #f4f6f8; border-color: #e1e4e8; color: #57606a; }
+.badge-demo { background: #f0f4f8; border-color: #d0dbe5; color: #2c4a6f; }
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.dot-connected { background: #2e8b57; box-shadow: 0 0 0 3px rgba(46, 139, 87, 0.2); }
+.dot-degraded { background: #d97706; box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.2); }
+.dot-disconnected { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2); }
+.dot-loading { background: #6b7280; animation: pulse 1.5s infinite; }
+.dot-demo { background: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); }
+
+.status-info-trigger {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin-left: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+  opacity: 0.75;
+  cursor: pointer;
+  border-radius: 50%;
+}
+.status-info-trigger:hover { opacity: 1; }
+
+.status-details-popover {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 6px;
+  z-index: 100;
+  width: 300px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  font-size: 13px;
+  color: #1e293b;
+}
+.status-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+.status-details-header strong { font-size: 13px; font-weight: 700; color: #0f172a; }
+.status-close-btn { background: none; border: none; color: #64748b; cursor: pointer; padding: 2px; border-radius: 4px; }
+.status-close-btn:hover { color: #0f172a; background: #f1f5f9; }
+.status-detail-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
+.status-detail-row span { color: #64748b; }
+.status-detail-row code { background: #f8fafc; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #0f172a; border: 1px solid #e2e8f0; }
+.text-green { color: #16a34a; }
+.text-amber { color: #d97706; }
+.status-error-box { background: #fef2f2; border: 1px solid #fee2e2; padding: 8px 10px; border-radius: 8px; margin-top: 6px; color: #991b1b; }
+.retry-btn { margin-top: 8px; display: flex; align-items: center; gap: 5px; background: #991b1b; color: white; border: none; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.retry-btn:hover { background: #7f1d1d; }
+
+.metrics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
 .metric-card, .panel { min-width: 0; border: 1px solid #e5ebe3; border-radius: 14px; background: var(--surface); box-shadow: 0 3px 11px #1c40210a; }
-.metric-card { min-height: 145px; padding: 16px 17px 14px; animation: rise-in .5s ease both; transition: transform .2s, box-shadow .2s; }
+.metric-card { min-height: 140px; padding: 16px 17px 14px; animation: rise-in .5s ease both; transition: transform .2s, box-shadow .2s; flex-direction: column; justify-content: space-between; }
 .metric-card:hover, .panel:hover { box-shadow: 0 8px 24px #1c402116; }
 .metric-card:hover { transform: translateY(-2px); }
 .metric-topline { display: flex; align-items: center; justify-content: space-between; }

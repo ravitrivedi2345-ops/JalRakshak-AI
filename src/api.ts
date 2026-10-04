@@ -434,3 +434,31 @@ export async function assessEvidenceScore(siteId: string) {
   }
 }
 
+export async function fetchWatershedGeoJSON(watershedCode: string) {
+  try {
+    const { data } = await apiClient.get(`/api/v1/watersheds/${watershedCode}/geojson`);
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function fetchSatelliteEpochs(watershedCode: string) {
+  try {
+    const { data } = await apiClient.get(`/api/v1/satellite/${watershedCode}/epochs`);
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function triggerSatelliteProcessing(watershedCode: string, epoch: string) {
+  try {
+    const { data } = await apiClient.post(`/api/v1/satellite/process/${watershedCode}/${epoch}`);
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+
