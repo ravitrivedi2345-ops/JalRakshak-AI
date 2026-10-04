@@ -76,6 +76,9 @@ def health_check(db: Session = Depends(get_db)):
     ai_weights_exist = os.path.exists(settings.AI_MODEL_PATH)
     ai_status = "active (YOLO weights loaded)" if ai_weights_exist else "active (demo adapter)"
 
+    from app.services.gemini_service import get_status as gemini_get_status
+    gemini_info = gemini_get_status()
+
     is_healthy = db_status == "connected"
 
     return {
@@ -86,10 +89,12 @@ def health_check(db: Session = Depends(get_db)):
             "environment": settings.APP_ENV,
             "database": db_status,
             "satellite_provider": settings.SATELLITE_PROVIDER,
-            "ai_detector": ai_status
+            "ai_detector": ai_status,
+            "gemini": gemini_info,
         },
         "message": "Backend service is operating normally" if is_healthy else "Database connectivity check failed"
     }
+
 
 if __name__ == "__main__":
     import uvicorn

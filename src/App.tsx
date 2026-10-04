@@ -215,48 +215,63 @@ const sites: Site[] = [
   },
 ];
 
-export type LayerCategory = "Reference Layers" | "Hydrology" | "Watershed Interventions" | "Satellite & Environmental" | "Field Evidence";
+export type LayerCategory =
+  | "A. INDIA"
+  | "B. ADMINISTRATIVE"
+  | "C. HYDROLOGICAL"
+  | "D. WATER FEATURES"
+  | "E. WATERSHED INTERVENTIONS"
+  | "F. ECOLOGICAL / RESTORATION"
+  | "G. FIELD EVIDENCE"
+  | "H. REMOTE SENSING";
 
 export type LayerItemDef = {
   id: string;
   name: string;
   category: LayerCategory;
   description: string;
-  badge: "active" | "unavailable" | "loading" | "demo";
+  badge: "LIVE" | "DEMO DATA" | "DATA UNAVAILABLE";
   color: string;
   defaultVisible: boolean;
   defaultOpacity: number;
 };
 
 export const initialLayers: LayerItemDef[] = [
-  // Reference Layers
-  { id: "boundary-india", name: "India National Boundary", category: "Reference Layers", description: "National boundary reference", badge: "active", color: "#1e3a8a", defaultVisible: true, defaultOpacity: 0.8 },
-  { id: "boundary-state", name: "State & District Boundaries", category: "Reference Layers", description: "Administrative boundaries", badge: "active", color: "#475569", defaultVisible: true, defaultOpacity: 0.6 },
-  { id: "boundary-watershed", name: "Watershed & Sub-watershed", category: "Reference Layers", description: "Micro-watershed boundaries", badge: "active", color: "#23835f", defaultVisible: true, defaultOpacity: 0.3 },
-  { id: "boundary-catchment", name: "Catchment Area", category: "Reference Layers", description: "Topographical basin contours", badge: "demo", color: "#854d0e", defaultVisible: false, defaultOpacity: 0.4 },
+  // A. INDIA
+  { id: "boundary-india", name: "India National Boundary", category: "A. INDIA", description: "National outer boundary reference (SOIN)", badge: "LIVE", color: "#1e3a8a", defaultVisible: true, defaultOpacity: 0.8 },
 
-  // Hydrology
-  { id: "hydro-streams", name: "Rivers & Stream Network", category: "Hydrology", description: "1st to 4th stream order network", badge: "active", color: "#0284c7", defaultVisible: true, defaultOpacity: 0.75 },
-  { id: "hydro-waterbodies", name: "Mapped Water Bodies", category: "Hydrology", description: "Reservoirs, lakes & ponds", badge: "active", color: "#38bdf8", defaultVisible: true, defaultOpacity: 0.7 },
+  // B. ADMINISTRATIVE
+  { id: "boundary-state", name: "State Boundaries", category: "B. ADMINISTRATIVE", description: "State & UT Administrative Outlines", badge: "LIVE", color: "#475569", defaultVisible: true, defaultOpacity: 0.6 },
+  { id: "boundary-district", name: "District Boundaries", category: "B. ADMINISTRATIVE", description: "District Administrative Boundaries", badge: "LIVE", color: "#64748b", defaultVisible: true, defaultOpacity: 0.5 },
+  { id: "boundary-subdistrict", name: "Sub-District / Tehsil Boundaries", category: "B. ADMINISTRATIVE", description: "Sub-District Boundaries (MoPR)", badge: "LIVE", color: "#94a3b8", defaultVisible: false, defaultOpacity: 0.4 },
 
-  // Watershed Interventions
-  { id: "interventions-checkdams", name: "Check Dams", category: "Watershed Interventions", description: "Check dam structures", badge: "active", color: "#059669", defaultVisible: true, defaultOpacity: 1.0 },
-  { id: "interventions-farmponds", name: "Farm Ponds", category: "Watershed Interventions", description: "Rainwater harvesting ponds", badge: "active", color: "#0284c7", defaultVisible: true, defaultOpacity: 1.0 },
-  { id: "interventions-percolation", name: "Percolation Tanks", category: "Watershed Interventions", description: "Artificial recharge tanks", badge: "active", color: "#d97706", defaultVisible: true, defaultOpacity: 1.0 },
-  { id: "interventions-plantation", name: "Plantation & Restoration", category: "Watershed Interventions", description: "Afforestation patches", badge: "active", color: "#65a30d", defaultVisible: true, defaultOpacity: 0.9 },
+  // C. HYDROLOGICAL
+  { id: "boundary-watershed", name: "Watershed Boundaries", category: "C. HYDROLOGICAL", description: "Sub-basin micro-watershed boundaries (CGWB)", badge: "LIVE", color: "#23835f", defaultVisible: true, defaultOpacity: 0.3 },
+  { id: "boundary-subwatershed", name: "Sub-watershed Boundaries", category: "C. HYDROLOGICAL", description: "Micro catchment drainage zones", badge: "LIVE", color: "#15803d", defaultVisible: true, defaultOpacity: 0.25 },
+  { id: "hydro-streams", name: "Rivers & Stream Network", category: "C. HYDROLOGICAL", description: "1st to 5th stream order network (India-WRIS)", badge: "LIVE", color: "#0284c7", defaultVisible: true, defaultOpacity: 0.75 },
 
-  // Satellite & Environmental
-  { id: "sat-basemap", name: "Satellite Imagery (Esri)", category: "Satellite & Environmental", description: "High-res satellite basemap", badge: "active", color: "#475569", defaultVisible: false, defaultOpacity: 1.0 },
-  { id: "sat-lulc", name: "Land Use / Land Cover (LULC)", category: "Satellite & Environmental", description: "Land cover classification", badge: "demo", color: "#eab308", defaultVisible: false, defaultOpacity: 0.6 },
-  { id: "sat-ndvi", name: "NDVI Vegetation Index", category: "Satellite & Environmental", description: "(NIR - Red) / (NIR + Red)", badge: "active", color: "#22c55e", defaultVisible: false, defaultOpacity: 0.5 },
-  { id: "sat-ndwi", name: "NDWI Water Index", category: "Satellite & Environmental", description: "(Green - NIR) / (Green + NIR)", badge: "active", color: "#0ea5e9", defaultVisible: false, defaultOpacity: 0.5 },
-  { id: "sat-soilmoisture", name: "Soil Moisture Index", category: "Satellite & Environmental", description: "Surface soil moisture", badge: "demo", color: "#a16207", defaultVisible: false, defaultOpacity: 0.4 },
-  { id: "sat-elevation", name: "Elevation & Slope (DEM)", category: "Satellite & Environmental", description: "Digital elevation model", badge: "demo", color: "#6b7280", defaultVisible: false, defaultOpacity: 0.4 },
-  { id: "sat-change", name: "Spatial Change Detection", category: "Satellite & Environmental", description: "Pre vs post change map", badge: "active", color: "#f97316", defaultVisible: false, defaultOpacity: 0.6 },
+  // D. WATER FEATURES
+  { id: "hydro-waterbodies", name: "Lakes, Ponds & Reservoirs", category: "D. WATER FEATURES", description: "Surface water body spread (ISRO Bhuvan)", badge: "LIVE", color: "#38bdf8", defaultVisible: true, defaultOpacity: 0.7 },
 
-  // Field Evidence
-  { id: "evidence-photos", name: "Geotagged Field Photos", category: "Field Evidence", description: "EXIF photo markers", badge: "active", color: "#ef4444", defaultVisible: true, defaultOpacity: 1.0 },
-  { id: "evidence-pending", name: "Pending Verification Sites", category: "Field Evidence", description: "Priority verification pins", badge: "active", color: "#f59e0b", defaultVisible: true, defaultOpacity: 1.0 },
+  // E. WATERSHED INTERVENTIONS
+  { id: "interventions-checkdams", name: "Check Dams & Gully Plugs", category: "E. WATERSHED INTERVENTIONS", description: "Check dam structures with GPS tags", badge: "LIVE", color: "#059669", defaultVisible: true, defaultOpacity: 1.0 },
+  { id: "interventions-farmponds", name: "Farm Ponds & Percolation Tanks", category: "E. WATERSHED INTERVENTIONS", description: "Rainwater harvesting & recharge tanks", badge: "LIVE", color: "#0284c7", defaultVisible: true, defaultOpacity: 1.0 },
+  { id: "interventions-recharge", name: "Recharge Structures", category: "E. WATERSHED INTERVENTIONS", description: "Subsurface groundwater recharge shafts", badge: "LIVE", color: "#d97706", defaultVisible: true, defaultOpacity: 1.0 },
+
+  // F. ECOLOGICAL / RESTORATION
+  { id: "interventions-plantation", name: "Plantation & Afforestation Sites", category: "F. ECOLOGICAL / RESTORATION", description: "CAMPA afforestation & soil conservation belts", badge: "LIVE", color: "#65a30d", defaultVisible: true, defaultOpacity: 0.9 },
+  { id: "interventions-restoration", name: "Ecological Restoration Areas", category: "F. ECOLOGICAL / RESTORATION", description: "Soil and moisture conservation zones", badge: "LIVE", color: "#84cc16", defaultVisible: true, defaultOpacity: 0.8 },
+
+  // G. FIELD EVIDENCE
+  { id: "evidence-photos", name: "Geotagged Field Evidence Photos", category: "G. FIELD EVIDENCE", description: "Verified EXIF ground-truth photos", badge: "LIVE", color: "#ef4444", defaultVisible: true, defaultOpacity: 1.0 },
+  { id: "evidence-observations", name: "Field Inspection Observations", category: "G. FIELD EVIDENCE", description: "Officer verification records", badge: "LIVE", color: "#f59e0b", defaultVisible: true, defaultOpacity: 1.0 },
+
+  // H. REMOTE SENSING
+  { id: "sat-basemap", name: "Satellite Imagery Basemap", category: "H. REMOTE SENSING", description: "High-resolution Sentinel-2 / Esri Imagery", badge: "LIVE", color: "#475569", defaultVisible: false, defaultOpacity: 1.0 },
+  { id: "sat-ndvi", name: "NDVI Vegetation Index", category: "H. REMOTE SENSING", description: "(NIR - Red) / (NIR + Red) 10m Sentinel-2", badge: "LIVE", color: "#22c55e", defaultVisible: false, defaultOpacity: 0.5 },
+  { id: "sat-ndwi", name: "NDWI Surface Water Index", category: "H. REMOTE SENSING", description: "(Green - NIR) / (Green + NIR) Water Spread", badge: "LIVE", color: "#0ea5e9", defaultVisible: false, defaultOpacity: 0.5 },
+  { id: "sat-lulc", name: "Land Use / Land Cover (LULC)", category: "H. REMOTE SENSING", description: "Bhuvan 10m LULC classification", badge: "LIVE", color: "#eab308", defaultVisible: false, defaultOpacity: 0.6 },
+  { id: "sat-change", name: "Spatial Change Detection", category: "H. REMOTE SENSING", description: "Multi-temporal Sentinel-2 change overlay", badge: "LIVE", color: "#f97316", defaultVisible: false, defaultOpacity: 0.6 },
 ];
 
 export type WatershedRegion = {
@@ -999,30 +1014,47 @@ function LayerExplorerCard({
   layers,
   onToggleLayer,
   onChangeOpacity,
+  onOpenRegistry,
 }: {
   layers: LayerItemDef[];
   onToggleLayer: (id: string) => void;
   onChangeOpacity: (id: string, opacity: number) => void;
+  onOpenRegistry?: () => void;
 }) {
   const [filterQuery, setFilterQuery] = useState("");
   const categories: LayerCategory[] = [
-    "Reference Layers",
-    "Hydrology",
-    "Watershed Interventions",
-    "Satellite & Environmental",
-    "Field Evidence",
+    "A. INDIA",
+    "B. ADMINISTRATIVE",
+    "C. HYDROLOGICAL",
+    "D. WATER FEATURES",
+    "E. WATERSHED INTERVENTIONS",
+    "F. ECOLOGICAL / RESTORATION",
+    "G. FIELD EVIDENCE",
+    "H. REMOTE SENSING",
   ];
 
   return (
     <div className="layer-explorer-card" data-tour="layer-tree">
-      <div className="layer-explorer-header">
-        <strong><Layers3 size={17} /> Layer Explorer</strong>
-        <small style={{ color: "#72857a" }}>{layers.filter((l) => l.defaultVisible).length} Active</small>
+      <div className="layer-explorer-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <strong><Layers3 size={17} /> Core Map Layers</strong>
+          <small style={{ color: "#72857a", marginLeft: "6px" }}>{layers.filter((l) => l.defaultVisible).length} Active</small>
+        </div>
+        {onOpenRegistry && (
+          <button
+            className="map-btn-sm"
+            style={{ fontSize: "11px", padding: "2px 8px", background: "#eef7f0", color: "#166534" }}
+            onClick={onOpenRegistry}
+            title="Open Data Source Registry"
+          >
+            <FileText size={13} /> Registry
+          </button>
+        )}
       </div>
       <input
         className="layer-search-input"
         type="text"
-        placeholder="Filter GIS layers..."
+        placeholder="Filter 8 core GIS layer groups..."
         value={filterQuery}
         onChange={(e) => setFilterQuery(e.target.value)}
       />
@@ -1047,7 +1079,7 @@ function LayerExplorerCard({
                     <span className="layer-swatch" style={{ backgroundColor: item.color }} />
                     {item.name}
                   </span>
-                  <span className={`layer-badge badge-${item.badge}`}>{item.badge}</span>
+                  <span className={`layer-badge badge-${item.badge === "LIVE" ? "active" : item.badge === "DEMO DATA" ? "demo" : "unavailable"}`}>{item.badge}</span>
                 </div>
                 <div style={{ fontSize: "11.5px", color: "#607266", paddingLeft: "24px" }}>
                   {item.description}

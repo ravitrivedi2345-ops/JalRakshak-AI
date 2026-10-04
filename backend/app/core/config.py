@@ -27,6 +27,10 @@ class Settings(BaseSettings):
 
     AI_MODEL_PATH: str = "./ml/models/intervention_detector.pt"
 
+    # Google Gemini AI
+    GEMINI_API_KEY: str = ""
+
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     @property

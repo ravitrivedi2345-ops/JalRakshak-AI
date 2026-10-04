@@ -299,9 +299,9 @@ export async function searchBackend(query: string): Promise<SearchResponse> {
   }
 }
 
-export async function fetchMapFeatures() {
+export async function fetchMapFeatures(params?: { bbox?: string; state?: string; district?: string; kind?: string; verification_status?: string }) {
   try {
-    const { data } = await apiClient.get("/api/v1/map/features");
+    const { data } = await apiClient.get("/api/v1/map/features", { params });
     return data?.data;
   } catch (err) {
     throw new Error(parseApiError(err));
@@ -311,6 +311,78 @@ export async function fetchMapFeatures() {
 export async function fetchMapLayers() {
   try {
     const { data } = await apiClient.get("/api/v1/map/layers");
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function fetchStates() {
+  try {
+    const { data } = await apiClient.get("/api/v1/states");
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function fetchDistricts(state?: string) {
+  try {
+    const { data } = await apiClient.get("/api/v1/districts", { params: { state } });
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function fetchStateBoundaries() {
+  try {
+    const { data } = await apiClient.get("/api/v1/boundaries/states");
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function fetchDistrictBoundaries() {
+  try {
+    const { data } = await apiClient.get("/api/v1/boundaries/districts");
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function fetchRivers() {
+  try {
+    const { data } = await apiClient.get("/api/v1/hydro/rivers");
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function fetchWaterBodies() {
+  try {
+    const { data } = await apiClient.get("/api/v1/water-bodies");
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function fetchRestorationSites() {
+  try {
+    const { data } = await apiClient.get("/api/v1/restoration-sites");
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function fetchFieldPhotoFeatures() {
+  try {
+    const { data } = await apiClient.get("/api/v1/field-photos");
     return data?.data;
   } catch (err) {
     throw new Error(parseApiError(err));
@@ -335,6 +407,24 @@ export async function fetchWatershedBoundary(watershedId: string) {
   }
 }
 
+export async function fetchImpactIndex(watershedId: string) {
+  try {
+    const { data } = await apiClient.get(`/api/v1/impact-index/${watershedId}`);
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function fetchCrossValidationStatus(siteId?: string) {
+  try {
+    const { data } = await apiClient.get("/api/v1/cross-validation/status", { params: { site_id: siteId } });
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
 export async function assessEvidenceScore(siteId: string) {
   try {
     const { data } = await apiClient.post("/api/v1/evidence/assess", null, { params: { site_id: siteId } });
@@ -343,3 +433,4 @@ export async function assessEvidenceScore(siteId: string) {
     throw new Error(parseApiError(err));
   }
 }
+

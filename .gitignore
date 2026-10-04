@@ -7,6 +7,7 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+backend/.env
 .vite/
 vite.config.*.timestamp-*
 *.tsbuildinfo
@@ -24,8 +25,10 @@ __pycache__/
 .pytest_cache/
 *.db
 *.sqlite3
+storage/
 backend/storage/uploads/*
 backend/storage/outputs/*
 !backend/storage/uploads/.gitkeep
 !backend/storage/outputs/.gitkeep
+
 
