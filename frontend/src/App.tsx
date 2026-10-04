@@ -531,7 +531,7 @@ function MapPanel({
   const addUploadMarkerRef = useRef<((coordinates: [number, number]) => MapLibreMarker) | null>(null);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
   const [fallbackZoom, setFallbackZoom] = useState(1);
-  const [basemap, setBasemap] = useState<"osm" | "satellite" | "topo" | "dark">("satellite");
+  const [basemap, setBasemap] = useState<"osm" | "satellite" | "topo" | "dark">("osm");
   const [pitch, setPitch] = useState<0 | 45>(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mouseCoords, setMouseCoords] = useState<{ lat: number; lng: number; zoom: number }>({ lat: 22.0, lng: 82.0, zoom: 3.8 });
@@ -606,8 +606,8 @@ function MapPanel({
               }
             },
             layers: [
-              { id: "satellite-raster", type: "raster", source: "satellite", minzoom: 0, maxzoom: 19 },
-              { id: "osm-raster", type: "raster", source: "osm", minzoom: 0, maxzoom: 19, layout: { visibility: "none" } },
+              { id: "osm-raster", type: "raster", source: "osm", minzoom: 0, maxzoom: 19 },
+              { id: "satellite-raster", type: "raster", source: "satellite", minzoom: 0, maxzoom: 19, layout: { visibility: "none" } },
               { id: "topo-raster", type: "raster", source: "topo", minzoom: 0, maxzoom: 17, layout: { visibility: "none" } },
               { id: "dark-raster", type: "raster", source: "dark", minzoom: 0, maxzoom: 19, layout: { visibility: "none" } },
             ],
@@ -642,9 +642,10 @@ function MapPanel({
 
         const onMapReady = () => {
           if (cancelled) return;
+          setMapStatus("ready");
           try {
             map.resize();
-            if (!map.getSource("watershed-boundary")) {
+            if (map.isStyleLoaded() && !map.getSource("watershed-boundary")) {
               map.addSource("watershed-boundary", {
                 type: "geojson",
                 data: {
@@ -684,7 +685,6 @@ function MapPanel({
           } catch (e) {
             console.warn("Boundary layer add notice:", e);
           }
-          setMapStatus("ready");
         };
 
         if (map.isStyleLoaded()) {
