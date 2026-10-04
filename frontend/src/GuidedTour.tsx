@@ -45,12 +45,15 @@ export function GuidedTour({
   }, [step]);
 
   useEffect(() => {
+    let animId: number;
+
     const update = () => {
       const target = document.querySelector<HTMLElement>(step.target);
       const viewportW = window.innerWidth;
       const viewportH = window.innerHeight;
       const PADDING = 16;
       const GAP = 16;
+      const margin = 10;
 
       const isMobile = viewportW <= 640;
       const cardWidth = Math.min(420, viewportW - PADDING * 2);
@@ -66,83 +69,118 @@ export function GuidedTour({
       }
 
       const rect = target.getBoundingClientRect();
-      const margin = 8;
       const highlighted: Spotlight = {
-        top: Math.max(PADDING, rect.top - margin),
-        left: Math.max(PADDING, rect.left - margin),
-        width: Math.min(viewportW - PADDING * 2, rect.width + margin * 2),
-        height: Math.min(viewportH - PADDING * 2, rect.height + margin * 2),
+        top: Math.max(0, rect.top - margin),
+        left: Math.max(0, rect.left - margin),
+        width: Math.min(viewportW, rect.width + margin * 2),
+        height: Math.min(viewportH, rect.height + margin * 2),
       };
       setSpotlight(highlighted);
 
       const cardEl = cardRef.current;
-      const cardHeight = cardEl ? cardEl.getBoundingClientRect().height : 360;
+      const cardHeight = cardEl ? cardEl.getBoundingClientRect().height : 340;
 
-      let top = PADDING;
-      let left = PADDING;
+      const checkOverlap = (t: number, l: number, w: number, h: number, target: Spotlight) => {
+        return l < target.left + target.width && l + w > target.left && t < target.top + target.height && t + h > target.top;
+      };
 
-      if (isMobile) {
-        if (rect.top + rect.height / 2 < viewportH / 2) {
-          top = viewportH - cardHeight - PADDING;
-        } else {
-          top = PADDING;
+      const clampX = (val: number) => Math.max(PADDING, Math.min(val, viewportW - cardWidth - PADDING));
+      const clampY = (val: number) => Math.max(PADDING, Math.min(val, viewportH - cardHeight - PADDING));
+
+      let finalTop = PADDING;
+      let finalLeft = PADDING;
+      let foundPlacement = false;
+
+      if (!isMobile) {
+        // Candidate 1: Below
+        const candBelowTop = highlighted.top + highlighted.height + GAP;
+        const candBelowLeft = clampX(highlighted.left);
+        if (candBelowTop + cardHeight <= viewportH - PADDING && !checkOverlap(candBelowTop, candBelowLeft, cardWidth, cardHeight, highlighted)) {
+          finalTop = candBelowTop;
+          finalLeft = candBelowLeft;
+          foundPlacement = true;
         }
-        left = (viewportW - cardWidth) / 2;
-      } else {
-        const spaceRight = viewportW - (highlighted.left + highlighted.width + GAP);
-        const spaceLeft = highlighted.left - GAP;
-        const spaceBelow = viewportH - (highlighted.top + highlighted.height + GAP);
-        const spaceAbove = highlighted.top - GAP;
 
-        if (spaceRight >= cardWidth + PADDING) {
-          left = highlighted.left + highlighted.width + GAP;
-          top = highlighted.top + highlighted.height / 2 - cardHeight / 2;
-        } else if (spaceLeft >= cardWidth + PADDING) {
-          left = highlighted.left - cardWidth - GAP;
-          top = highlighted.top + highlighted.height / 2 - cardHeight / 2;
-        } else if (spaceBelow >= cardHeight + PADDING) {
-          top = highlighted.top + highlighted.height + GAP;
-          left = highlighted.left + highlighted.width / 2 - cardWidth / 2;
-        } else if (spaceAbove >= cardHeight + PADDING) {
-          top = highlighted.top - cardHeight - GAP;
-          left = highlighted.left + highlighted.width / 2 - cardWidth / 2;
-        } else {
-          top = (viewportH - cardHeight) / 2;
-          left = (viewportW - cardWidth) / 2;
+        // Candidate 2: Above
+        if (!foundPlacement) {
+          const candAboveTop = highlighted.top - cardHeight - GAP;
+          const candAboveLeft = clampX(highlighted.left);
+          if (candAboveTop >= PADDING && !checkOverlap(candAboveTop, candAboveLeft, cardWidth, cardHeight, highlighted)) {
+            finalTop = candAboveTop;
+            finalLeft = candAboveLeft;
+            foundPlacement = true;
+          }
+        }
+
+        // Candidate 3: Right
+        if (!foundPlacement) {
+          const candRightLeft = highlighted.left + highlighted.width + GAP;
+          const candRightTop = clampY(highlighted.top);
+          if (candRightLeft + cardWidth <= viewportW - PADDING && !checkOverlap(candRightTop, candRightLeft, cardWidth, cardHeight, highlighted)) {
+            finalTop = candRightTop;
+            finalLeft = candRightLeft;
+            foundPlacement = true;
+          }
+        }
+
+        // Candidate 4: Left
+        if (!foundPlacement) {
+          const candLeftLeft = highlighted.left - cardWidth - GAP;
+          const candLeftTop = clampY(highlighted.top);
+          if (candLeftLeft >= PADDING && !checkOverlap(candLeftTop, candLeftLeft, cardWidth, cardHeight, highlighted)) {
+            finalTop = candLeftTop;
+            finalLeft = candLeftLeft;
+            foundPlacement = true;
+          }
         }
       }
 
-      // Check if card overlaps the highlighted element
-      const overlaps =
-        left < highlighted.left + highlighted.width &&
-        left + cardWidth > highlighted.left &&
-        top < highlighted.top + highlighted.height &&
-        top + cardHeight > highlighted.top;
+      // Fallback placement when element is huge (e.g. Map area or large panel) or on mobile
+      if (!foundPlacement) {
+        const corners = [
+          // Bottom-Right
+          { top: clampY(viewportH - cardHeight - PADDING), left: clampX(viewportW - cardWidth - PADDING) },
+          // Top-Right
+          { top: clampY(80), left: clampX(viewportW - cardWidth - PADDING) },
+          // Bottom-Left
+          { top: clampY(viewportH - cardHeight - PADDING), left: clampX(PADDING) },
+          // Top-Left
+          { top: clampY(80), left: clampX(PADDING) }
+        ];
 
-      if (overlaps) {
-        if (highlighted.top > cardHeight + GAP + PADDING) {
-          top = highlighted.top - cardHeight - GAP;
-        } else if (viewportH - (highlighted.top + highlighted.height) > cardHeight + GAP + PADDING) {
-          top = highlighted.top + highlighted.height + GAP;
+        let minOverlapArea = Infinity;
+        let bestCorner = corners[0];
+
+        for (const corner of corners) {
+          const overlapW = Math.max(0, Math.min(corner.left + cardWidth, highlighted.left + highlighted.width) - Math.max(corner.left, highlighted.left));
+          const overlapH = Math.max(0, Math.min(corner.top + cardHeight, highlighted.top + highlighted.height) - Math.max(corner.top, highlighted.top));
+          const overlapArea = overlapW * overlapH;
+
+          if (overlapArea < minOverlapArea) {
+            minOverlapArea = overlapArea;
+            bestCorner = corner;
+          }
         }
+
+        finalTop = bestCorner.top;
+        finalLeft = bestCorner.left;
       }
 
-      // Clamp strictly within visible viewport
-      top = Math.max(PADDING, Math.min(top, viewportH - cardHeight - PADDING));
-      left = Math.max(PADDING, Math.min(left, viewportW - cardWidth - PADDING));
-
-      setTip({ top, left, width: cardWidth });
+      setTip({ top: finalTop, left: finalLeft, width: cardWidth });
     };
 
-    const animationFrame = window.requestAnimationFrame(update);
+    const loop = () => {
+      update();
+      animId = window.requestAnimationFrame(loop);
+    };
+    animId = window.requestAnimationFrame(loop);
+
     window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
     window.addEventListener("orientationchange", update);
 
     return () => {
-      window.cancelAnimationFrame(animationFrame);
+      window.cancelAnimationFrame(animId);
       window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
       window.removeEventListener("orientationchange", update);
     };
   }, [step]);
