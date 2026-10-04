@@ -13,7 +13,7 @@ def test_list_verification_tasks():
 def test_create_and_submit_task():
     create_res = client.post(
         "/api/v1/verification/tasks",
-        json={"site_id": "kolar", "officer": "Priya Patel", "due_date": "2026-10-30", "observation": "Initial check"}
+        json={"site_id": "test-site-999", "officer": "Priya Patel", "due_date": "2026-10-30", "observation": "Initial check"}
     )
     assert create_res.status_code == 201
     task_id = create_res.json()["data"]["id"]
