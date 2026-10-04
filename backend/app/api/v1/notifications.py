@@ -1,40 +1,41 @@
 from typing import Dict, Any
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
+from app.models.notification import Notification
 from app.core.exceptions import create_success_response, create_error_response
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
-NOTIFICATIONS_DB: Dict[str, Dict[str, Any]] = {
-    "notif-1": {
-        "id": "notif-1",
-        "title": "Field Check Due",
-        "message": "Barmer Farm Pond sample verification is pending review.",
-        "is_read": False,
-        "created_at": "2026-10-04T01:00:00Z"
-    },
-    "notif-2": {
-        "id": "notif-2",
-        "title": "Satellite Pass Processed",
-        "message": "New Sentinel-2 observation available for Luni Basin.",
-        "is_read": False,
-        "created_at": "2026-10-03T18:30:00Z"
+def _serialize_notification(notif: Notification):
+    return {
+        "id": notif.id,
+        "title": notif.title,
+        "message": notif.message,
+        "is_read": notif.is_read,
+        "created_at": notif.created_at.isoformat() if notif.created_at else None
     }
-}
 
 @router.get("")
-def list_notifications():
-    return create_success_response(data=list(NOTIFICATIONS_DB.values()))
+def list_notifications(db: Session = Depends(get_db)):
+    notifications = db.query(Notification).order_by(Notification.created_at.desc()).all()
+    return create_success_response(data=[_serialize_notification(n) for n in notifications])
 
 @router.post("/{notification_id}/read")
-def mark_as_read(notification_id: str):
-    notif = NOTIFICATIONS_DB.get(notification_id)
+def mark_as_read(notification_id: str, db: Session = Depends(get_db)):
+    notif = db.query(Notification).filter_by(id=notification_id).first()
     if not notif:
         return create_error_response(status_code=404, code="NOT_FOUND", message="Notification not found")
-    notif["is_read"] = True
-    return create_success_response(data=notif, message="Notification marked as read")
+    notif.is_read = True
+    db.commit()
+    db.refresh(notif)
+    return create_success_response(data=_serialize_notification(notif), message="Notification marked as read")
 
 @router.post("/read-all")
-def mark_all_as_read():
-    for notif in NOTIFICATIONS_DB.values():
-        notif["is_read"] = True
-    return create_success_response(data=list(NOTIFICATIONS_DB.values()), message="All notifications marked as read")
+def mark_all_as_read(db: Session = Depends(get_db)):
+    notifications = db.query(Notification).all()
+    for notif in notifications:
+        notif.is_read = True
+    db.commit()
+    return create_success_response(data=[_serialize_notification(n) for n in notifications], message="All notifications marked as read")

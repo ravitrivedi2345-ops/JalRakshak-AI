@@ -6,3 +6,4 @@ from app.models.field_image import FieldImage
 from app.models.analysis import AIAnalysis, EvidenceAssessment
 from app.models.verification import VerificationTaskModel
 from app.models.notification import Notification
+from app.models.report import Report

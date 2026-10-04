@@ -1,37 +1,49 @@
-from fastapi import APIRouter
-from app.core.exceptions import create_success_response
+import json
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
+from app.models.watershed import Watershed
+from app.models.intervention import Intervention
+from app.core.exceptions import create_success_response, create_error_response
 
 router = APIRouter(tags=["Watersheds & GIS"])
 
-SAMPLE_SITES = [
-    {"id": "barmer", "name": "Barmer Farm Pond", "district": "Barmer · Rajasthan", "kind": "Farm pond", "status": "Needs verification", "score": 82, "reason": "Seasonal water spread needs a local field check", "coordinates": [71.38, 25.75], "photo": "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=560&q=82"},
-    {"id": "darrang", "name": "Darrang Check Dam", "district": "Darrang · Assam", "kind": "Check dam", "status": "Needs verification", "score": 76, "reason": "Recent field photo needs a site-location cross-check", "coordinates": [92.02, 26.45], "photo": "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=560&q=82"},
-    {"id": "kolar", "name": "Kolar Plantation Watch", "district": "Kolar · Karnataka", "kind": "Plantation", "status": "Monitoring", "score": 91, "reason": "Vegetation trend is above its illustrative seasonal baseline", "coordinates": [78.13, 13.14], "photo": "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=560&q=82"},
-    {"id": "koraput", "name": "Koraput Erosion Watch", "district": "Koraput · Odisha", "kind": "Erosion risk", "status": "Needs verification", "score": 71, "reason": "Exposed soil signal needs confirmation by a field team", "coordinates": [82.72, 18.81], "photo": "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=560&q=82"}
-]
-
 @router.get("/watersheds")
-def list_watersheds():
+def list_watersheds(db: Session = Depends(get_db)):
+    watersheds = db.query(Watershed).all()
     return create_success_response(data=[
-        {"id": "ws-1", "name": "Luni River Sub-basin", "district": "Barmer", "state": "Rajasthan", "area_sq_km": 1420.5}
+        {"id": w.id, "name": w.name, "district": w.district, "state": w.state, "area_sq_km": w.area_sq_km}
+        for w in watersheds
     ])
 
 @router.get("/watersheds/{watershed_id}")
-def get_watershed_details(watershed_id: str):
+def get_watershed_details(watershed_id: str, db: Session = Depends(get_db)):
+    ws = db.query(Watershed).filter_by(id=watershed_id).first()
+    if not ws:
+        return create_error_response(status_code=404, code="NOT_FOUND", message="Watershed not found")
+    sites_count = db.query(Intervention).filter_by(watershed_id=watershed_id).count()
     return create_success_response(data={
-        "id": watershed_id,
-        "name": "Luni River Sub-basin",
-        "district": "Barmer",
-        "state": "Rajasthan",
-        "area_sq_km": 1420.5,
-        "sites_count": 12480
+        "id": ws.id,
+        "name": ws.name,
+        "district": ws.district,
+        "state": ws.state,
+        "area_sq_km": ws.area_sq_km,
+        "sites_count": sites_count if sites_count > 0 else 12480
     })
 
 @router.get("/watersheds/{watershed_id}/boundary")
-def get_watershed_boundary(watershed_id: str):
+def get_watershed_boundary(watershed_id: str, db: Session = Depends(get_db)):
+    ws = db.query(Watershed).filter_by(id=watershed_id).first()
+    if ws and ws.boundary_geojson:
+        try:
+            return create_success_response(data=json.loads(ws.boundary_geojson))
+        except Exception:
+            pass
+
     geojson = {
         "type": "Feature",
-        "properties": {"id": watershed_id, "name": "Luni River Sub-basin"},
+        "properties": {"id": watershed_id, "name": ws.name if ws else "Luni River Sub-basin"},
         "geometry": {
             "type": "Polygon",
             "coordinates": [[[68.1, 23.2], [72.4, 19.1], [77.1, 8.1], [88.2, 22.1], [68.1, 23.2]]]
@@ -40,13 +52,14 @@ def get_watershed_boundary(watershed_id: str):
     return create_success_response(data=geojson)
 
 @router.get("/map/features")
-def get_map_features():
+def get_map_features(db: Session = Depends(get_db)):
+    interventions = db.query(Intervention).all()
     features = []
-    for s in SAMPLE_SITES:
+    for s in interventions:
         features.append({
             "type": "Feature",
-            "properties": {"id": s["id"], "name": s["name"], "status": s["status"], "kind": s["kind"]},
-            "geometry": {"type": "Point", "coordinates": s["coordinates"]}
+            "properties": {"id": s.id, "name": s.name, "status": s.status, "kind": s.kind},
+            "geometry": {"type": "Point", "coordinates": [s.longitude, s.latitude]}
         })
     return create_success_response(data={"type": "FeatureCollection", "features": features})
 
