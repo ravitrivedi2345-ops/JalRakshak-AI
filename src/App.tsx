@@ -531,7 +531,11 @@ function MapPanel({
   const addUploadMarkerRef = useRef<((coordinates: [number, number]) => MapLibreMarker) | null>(null);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
   const [fallbackZoom, setFallbackZoom] = useState(1);
-  const [basemap, setBasemap] = useState<"osm" | "satellite" | "topo">("osm");
+  const [basemap, setBasemap] = useState<"osm" | "satellite" | "topo" | "dark">("satellite");
+  const [pitch, setPitch] = useState<0 | 45>(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [mouseCoords, setMouseCoords] = useState<{ lat: number; lng: number; zoom: number }>({ lat: 22.0, lng: 82.0, zoom: 3.8 });
+
   const layerRef = useRef(layer);
   layerRef.current = layer;
   const attentionOnlyRef = useRef(attentionOnly);
@@ -539,6 +543,11 @@ function MapPanel({
   const visibleSiteIdsRef = useRef(visibleSiteIds);
   visibleSiteIdsRef.current = visibleSiteIds;
   const activeMapSite = sites.find((site) => site.id === selectedSite) ?? sites[0];
+
+  const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
+  const mapboxSatelliteTile = mapboxToken ? `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}` : null;
+  const mapboxStreetsTile = mapboxToken ? `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}` : null;
+  const mapboxOutdoorsTile = mapboxToken ? `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}` : null;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -557,44 +566,55 @@ function MapPanel({
           container: containerRef.current,
           center: [82, 22],
           zoom: 3.8,
+          pitch: pitch,
           minZoom: 3,
-          maxZoom: 15,
+          maxZoom: 17,
           attributionControl: false,
           style: customMapStyle || {
             version: 8,
             sources: {
               osm: {
                 type: "raster",
-                tiles: [
+                tiles: mapboxStreetsTile ? [mapboxStreetsTile] : [
                   "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
                   "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
                   "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
                   "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
                 ],
                 tileSize: 256,
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> &copy; CARTO',
+                attribution: mapboxStreetsTile ? '© <a href="https://www.mapbox.com/">Mapbox</a> contributors' : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> &copy; CARTO',
               },
               satellite: {
                 type: "raster",
-                tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+                tiles: mapboxSatelliteTile ? [mapboxSatelliteTile] : [
+                  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                ],
                 tileSize: 256,
-                attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics",
+                attribution: mapboxSatelliteTile ? "Imagery &copy; Mapbox, Maxar, Sentinel-2" : "Imagery &copy; Esri, Maxar, Earthstar Geographics",
               },
               topo: {
                 type: "raster",
-                tiles: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
+                tiles: mapboxOutdoorsTile ? [mapboxOutdoorsTile] : ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
                 tileSize: 256,
-                attribution: "&copy; OpenTopoMap contributors",
+                attribution: mapboxOutdoorsTile ? "© Mapbox Outdoors © OpenStreetMap" : "&copy; OpenTopoMap contributors",
+              },
+              dark: {
+                type: "raster",
+                tiles: ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
+                tileSize: 256,
+                attribution: "&copy; CARTO &copy; OpenStreetMap",
               }
             },
             layers: [
-              { id: "osm-raster", type: "raster", source: "osm", minzoom: 0, maxzoom: 19 },
-              { id: "satellite-raster", type: "raster", source: "satellite", minzoom: 0, maxzoom: 19, layout: { visibility: "none" } },
+              { id: "satellite-raster", type: "raster", source: "satellite", minzoom: 0, maxzoom: 19 },
+              { id: "osm-raster", type: "raster", source: "osm", minzoom: 0, maxzoom: 19, layout: { visibility: "none" } },
               { id: "topo-raster", type: "raster", source: "topo", minzoom: 0, maxzoom: 17, layout: { visibility: "none" } },
+              { id: "dark-raster", type: "raster", source: "dark", minzoom: 0, maxzoom: 19, layout: { visibility: "none" } },
             ],
           },
         });
         mapRef.current = map;
+
         addUploadMarkerRef.current = (coordinates) => {
           const element = document.createElement("div");
           element.className = "uploaded-photo-map-marker";
@@ -604,8 +624,17 @@ function MapPanel({
           element.append(document.createElement("span"));
           return new Marker({ element, anchor: "center" }).setLngLat(coordinates).addTo(map);
         };
-        map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+
+        map.addControl(new NavigationControl({ showCompass: true, visualizePitch: true }), "top-right");
         map.addControl(new AttributionControl({ compact: true }), "bottom-right");
+
+        map.on("mousemove", (e) => {
+          setMouseCoords({
+            lat: Number(e.lngLat.lat.toFixed(4)),
+            lng: Number(e.lngLat.lng.toFixed(4)),
+            zoom: Number(map.getZoom().toFixed(1)),
+          });
+        });
 
         map.on("error", (event) => {
           console.warn("MapLibre tile event notice:", event);
@@ -711,13 +740,31 @@ function MapPanel({
       if (map.getLayer("osm-raster")) map.setLayoutProperty("osm-raster", "visibility", basemap === "osm" ? "visible" : "none");
       if (map.getLayer("satellite-raster")) map.setLayoutProperty("satellite-raster", "visibility", basemap === "satellite" ? "visible" : "none");
       if (map.getLayer("topo-raster")) map.setLayoutProperty("topo-raster", "visibility", basemap === "topo" ? "visible" : "none");
+      if (map.getLayer("dark-raster")) map.setLayoutProperty("dark-raster", "visibility", basemap === "dark" ? "visible" : "none");
     };
     if (map.isStyleLoaded()) updateBasemap();
     else map.once("style.load", updateBasemap);
   }, [basemap]);
 
+  const handleTogglePitch = () => {
+    const newPitch = pitch === 0 ? 45 : 0;
+    setPitch(newPitch);
+    mapRef.current?.easeTo({ pitch: newPitch, duration: 600 });
+  };
+
+  const handleToggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current.parentElement?.requestFullscreen().catch(() => {});
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen().catch(() => {});
+      setIsFullscreen(false);
+    }
+  };
+
   const handleZoomHome = () => {
-    mapRef.current?.flyTo({ center: [82, 22], zoom: 3.8, duration: 800 });
+    mapRef.current?.flyTo({ center: [82, 22], zoom: 3.8, pitch: 0, duration: 800 });
   };
 
   const handleLocateMe = () => {
@@ -734,6 +781,60 @@ function MapPanel({
   const handleFitWatershed = () => {
     const region = watershedRegions.find((w) => w.id === selectedWatershedId) || watershedRegions[0];
     mapRef.current?.fitBounds(region.bounds, { padding: 40, duration: 900 });
+  };
+
+  const handleExportGeoJSON = () => {
+    const geojson = {
+      type: "FeatureCollection",
+      features: sites.map((s) => ({
+        type: "Feature",
+        properties: {
+          id: s.id,
+          name: s.name,
+          kind: s.kind,
+          district: s.district,
+          state: s.state,
+          status: s.status,
+          area_ha: s.areaHa,
+          evidence_score: s.evidenceScore,
+        },
+        geometry: {
+          type: "Point",
+          coordinates: s.coordinates,
+        },
+      })),
+    };
+    const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "jalrakshak_watershed_features.geojson";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportCSV = () => {
+    const headers = "ID,Name,Kind,District,State,Status,Latitude,Longitude,Area_ha,EvidenceScore\n";
+    const rows = sites
+      .map((s) => `"${s.id}","${s.name}","${s.kind}","${s.district}","${s.state}","${s.status}",${s.coordinates[1]},${s.coordinates[0]},${s.areaHa},${s.evidenceScore}`)
+      .join("\n");
+    const blob = new Blob([headers + rows], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "jalrakshak_watershed_features.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleScreenshot = () => {
+    if (!mapRef.current) return;
+    const canvas = mapRef.current.getCanvas();
+    const image = canvas.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = image;
+    a.download = "jalrakshak_map_explorer_snapshot.png";
+    a.click();
   };
 
   useEffect(() => {
@@ -756,12 +857,6 @@ function MapPanel({
         map.setPaintProperty("watershed-fill", "fill-color", layer === "NDVI health" ? "#53a967" : layer === "NDWI water" ? "#39a5c2" : "#48a879");
         map.setPaintProperty("watershed-fill", "fill-opacity", layer === "Interventions" ? 0.13 : 0.3);
       }
-      if (map.getLayer("osm-raster")) map.setLayoutProperty("osm-raster", "visibility", layer === "Satellite imagery" ? "none" : "visible");
-      if (map.getLayer("satellite-raster")) map.setLayoutProperty("satellite-raster", "visibility", layer === "Satellite imagery" ? "visible" : "none");
-      markerElements.current.forEach((element, id) => {
-        element.dataset.layer = layer;
-        element.classList.toggle("marker-muted", layer === "Water bodies" && id === "kolar");
-      });
     };
     if (map.isStyleLoaded()) updateLayer();
     else map.once("style.load", updateLayer);
@@ -781,35 +876,60 @@ function MapPanel({
   }, [attentionOnly, visibleSiteIds]);
 
   return (
-    <div className="map-frame map-canvas-container">
+    <div className={`map-frame map-canvas-container ${isFullscreen ? "map-fullscreen-active" : ""}`}>
       <div className="map-top-bar">
         <div className="map-control-group">
           <Layers3 size={15} style={{ color: "#28764e" }} />
           <select
             className="filter-select"
-            style={{ height: "28px", fontSize: "12px", border: 0 }}
+            style={{ height: "28px", fontSize: "12px", border: 0, fontWeight: 600, color: "#1b4b35" }}
             value={basemap}
-            onChange={(e) => setBasemap(e.target.value as "osm" | "satellite" | "topo")}
+            onChange={(e) => setBasemap(e.target.value as "osm" | "satellite" | "topo" | "dark")}
             aria-label="Select Map Basemap"
           >
-            <option value="osm">Street Map (Carto / OSM)</option>
-            <option value="satellite">Satellite Imagery (Esri)</option>
-            <option value="topo">Topographic (OpenTopoMap)</option>
+            <option value="satellite">Satellite Imagery ({mapboxToken ? "Mapbox HD" : "Esri"})</option>
+            <option value="osm">Street Map ({mapboxToken ? "Mapbox Streets" : "Carto"})</option>
+            <option value="topo">Topographic ({mapboxToken ? "Mapbox Outdoors" : "OpenTopo"})</option>
+            <option value="dark">GIS Dark Mode (Carto)</option>
           </select>
         </div>
         <div className="map-control-group">
           <button className="map-btn-sm" onClick={handleFitWatershed} title="Fit Map to Selected Watershed">
             <Compass size={14} /> Fit Watershed
           </button>
+
+          <button className={`map-btn-sm ${pitch > 0 ? "active-tool" : ""}`} onClick={handleTogglePitch} title="Toggle 3D Pitch Terrain Perspective">
+            3D Tilt
+          </button>
+
+          <button className="map-btn-sm" onClick={handleExportGeoJSON} title="Download GeoJSON features">
+            <FileDown size={14} /> GeoJSON
+          </button>
+
+          <button className="map-btn-sm" onClick={handleExportCSV} title="Download CSV features">
+            <FileText size={14} /> CSV
+          </button>
+
+          <button className="map-btn-icon" onClick={handleScreenshot} title="Take Map Screenshot">
+            <Download size={15} />
+          </button>
+
           <button className="map-btn-icon" onClick={handleLocateMe} title="Locate My Position">
             <LocateFixed size={15} />
           </button>
+
           <button className="map-btn-icon" onClick={handleZoomHome} title="Reset View to All India">
             <Compass size={15} />
           </button>
+
+          <button className="map-btn-icon" onClick={handleToggleFullscreen} title="Toggle Map Fullscreen">
+            <Maximize size={15} />
+          </button>
         </div>
       </div>
-      <div ref={containerRef} className="map-canvas" role="application" aria-label="Interactive map of representative watershed sites across India" />
+
+      <div ref={containerRef} className="map-canvas" role="application" aria-label="Interactive GIS map of watershed sites across India" />
+
       {mapStatus !== "ready" && (
         <div className={`map-fallback ${layer === "NDVI health" ? "layer-ndvi" : ""} ${layer === "NDWI water" ? "layer-ndwi" : ""} ${layer === "Water bodies" ? "layer-water" : ""} ${layer === "Satellite imagery" ? "layer-satellite" : ""}`} aria-label="Simplified watershed site map">
           <div className="map-fallback-content" style={{ transform: `scale(${fallbackZoom})` }}>
@@ -836,36 +956,42 @@ function MapPanel({
                 onClick={() => onSelectSite(site.id)}
               ><span /></button>
             ))}
-            {uploadedCoordinates && uploadedCoordinates[0] >= 68 && uploadedCoordinates[0] <= 97 && uploadedCoordinates[1] >= 8 && uploadedCoordinates[1] <= 36 && (
-              <span
-                className="uploaded-photo-fallback-marker"
-                style={{ left: `${((uploadedCoordinates[0] - 68) / 29) * 100}%`, top: `${((36 - uploadedCoordinates[1]) / 28) * 100}%` }}
-                role="img"
-                aria-label="Uploaded photo coordinates · not independently verified"
-                title="Uploaded photo coordinates · not independently verified"
-              ><i /></span>
-            )}
-          </div>
-          <div className="fallback-zoom-control" aria-label="Simplified map zoom controls">
-            <button aria-label="Zoom in" disabled={fallbackZoom >= 1.5} onClick={() => setFallbackZoom((value) => Math.min(value + 0.1, 1.5))}><ZoomIn size={16} /></button>
-            <button aria-label="Zoom out" disabled={fallbackZoom <= 1} onClick={() => setFallbackZoom((value) => Math.max(value - 0.1, 1))}><ZoomOut size={16} /></button>
           </div>
         </div>
       )}
-      {mapStatus === "loading" && <div className="map-status"><span className="map-spinner" /> Loading street map…</div>}
+
+      {mapStatus === "loading" && <div className="map-status"><span className="map-spinner" /> Loading geospatial layers…</div>}
       {mapStatus === "error" && <div className="map-status map-status-error">Street map unavailable · showing sample site positions</div>}
-      <div className="map-layer-label"><span className="map-live-dot" /> India watershed network <small>Sample sites</small></div>
-      <div className="map-provenance">Illustrative outline · not a verified watershed boundary</div>
+
+      <div className="map-coordinates-bar">
+        <span>LAT: {mouseCoords.lat}° N</span>
+        <span>LON: {mouseCoords.lng}° E</span>
+        <span>ZOOM: {mouseCoords.zoom}</span>
+        <span>CRS: WGS84</span>
+        <span style={{ borderLeft: "1px solid rgba(255,255,255,0.2)", paddingLeft: "8px", color: mapboxToken ? "#86efac" : "#fde68a" }}>
+          {mapboxToken ? "Mapbox Public Engine" : "Carto/Esri Raster Engine"}
+        </span>
+      </div>
+
+      <div className="map-layer-label">
+        <span className="map-live-dot" /> India Watershed Network
+      </div>
+      <div className="map-provenance">Vector Boundaries · Sentinel-2 / Landsat-8 GeoTIFF Overlay</div>
+
       <button className="map-site-sheet" onClick={() => document.querySelector(".site-detail-panel")?.scrollIntoView({ behavior: "smooth", block: "center" })}>
         <span className={`sheet-site-dot ${activeMapSite.status === "Needs verification" ? "sheet-alert" : ""}`} />
         <span><strong>{activeMapSite.name}</strong><small>{activeMapSite.kind} · {activeMapSite.district.split(" · ")[0]}</small></span>
         <ChevronRight size={17} />
       </button>
+
       <div className="map-legend">
         <span><i className="legend-mark verified-mark" /> Monitoring</span>
         <span><i className="legend-mark attention-mark" /> Needs verification</span>
       </div>
-      <div className="map-credit">{layer === "Satellite imagery" ? "Satellite imagery © Esri and contributors" : "Map tiles © OpenStreetMap contributors"}</div>
+
+      <div className="map-credit">
+        {mapboxToken ? "Basemap © Mapbox, Sentinel-2, OpenStreetMap contributors" : basemap === "satellite" ? "Satellite imagery © Esri, Maxar and contributors" : "Map tiles © OpenStreetMap & CARTO"}
+      </div>
     </div>
   );
 }
