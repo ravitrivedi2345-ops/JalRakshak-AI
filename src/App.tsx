@@ -2704,7 +2704,7 @@ function App() {
                 <span className="landuse-icon"><Leaf size={17} /></span>
               </div>
               <div className="landuse-image">
-                <img src="https://images.unsplash.com/photo-1499529112087-3cb3b73cec95?auto=format&fit=crop&w=700&q=78" alt="Aerial view of varied green agricultural land" loading="lazy" />
+                <img src="/images/sentinel2_monsoon_ndvi.jpg" alt="Sentinel-2 Multispectral Land Cover View" loading="lazy" />
                 <span><Layers3 size={13} /> LAND COVER CLASSIFICATION</span>
               </div>
               <div className="landuse-stats">

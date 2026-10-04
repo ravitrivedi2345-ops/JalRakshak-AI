@@ -206,7 +206,7 @@ img { display: block; max-width: 100%; }
 .map-fallback.layer-ndvi .fallback-basin path { fill: #58a86542; stroke: #2e8a59; }
 .map-fallback.layer-ndwi .fallback-basin path { fill: #58a9bf45; stroke: #378ca1; }
 .map-fallback.layer-water .fallback-basin path { fill: #58a9bf38; stroke: #378ca1; }
-.map-fallback.layer-satellite { background: linear-gradient(140deg, #18392f55, #143b2842), url("https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1100&q=72") center/cover; }
+.map-fallback.layer-satellite { background: linear-gradient(140deg, #18392f55, #143b2842), url("/images/sentinel2_monsoon_ndvi.jpg") center/cover; }
 .map-fallback.layer-satellite .fallback-basin path { fill: #58a86527; stroke: #e4f4d4; }
 .map-fallback.layer-satellite .fallback-basin text { fill: #fff; }
 .map-fallback.layer-water .fallback-marker[data-site-kind="Plantation"], .map-fallback.layer-water .fallback-marker[data-site-kind="Erosion risk"] { opacity: .32; }
