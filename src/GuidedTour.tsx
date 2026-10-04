@@ -40,7 +40,7 @@ export function GuidedTour({
   useEffect(() => {
     const target = document.querySelector<HTMLElement>(step.target);
     if (target) {
-      target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
     }
   }, [step]);
 
@@ -94,63 +94,44 @@ export function GuidedTour({
         }
         left = (viewportW - cardWidth) / 2;
       } else {
-        // Desktop layout: find non-overlapping quadrant
-        const spaceRight = viewportW - (highlighted.left + highlighted.width + GAP);
-        const spaceLeft = highlighted.left - GAP;
+        // Desktop positioning: evaluate space in priority order
         const spaceBelow = viewportH - (highlighted.top + highlighted.height + GAP);
         const spaceAbove = highlighted.top - GAP;
+        const spaceRight = viewportW - (highlighted.left + highlighted.width + GAP);
+        const spaceLeft = highlighted.left - GAP;
 
-        if (spaceRight >= cardWidth + PADDING) {
-          // Place to the Right
-          left = highlighted.left + highlighted.width + GAP;
-          top = highlighted.top + highlighted.height / 2 - cardHeight / 2;
-        } else if (spaceLeft >= cardWidth + PADDING) {
-          // Place to the Left
-          left = highlighted.left - cardWidth - GAP;
-          top = highlighted.top + highlighted.height / 2 - cardHeight / 2;
-        } else if (spaceBelow >= cardHeight + PADDING) {
-          // Place Below
+        if (spaceBelow >= cardHeight + PADDING) {
           top = highlighted.top + highlighted.height + GAP;
-          left = highlighted.left + highlighted.width / 2 - cardWidth / 2;
+          left = Math.max(PADDING, Math.min(highlighted.left, viewportW - cardWidth - PADDING));
         } else if (spaceAbove >= cardHeight + PADDING) {
-          // Place Above
           top = highlighted.top - cardHeight - GAP;
-          left = highlighted.left + highlighted.width / 2 - cardWidth / 2;
+          left = Math.max(PADDING, Math.min(highlighted.left, viewportW - cardWidth - PADDING));
+        } else if (spaceRight >= cardWidth + PADDING) {
+          left = highlighted.left + highlighted.width + GAP;
+          top = Math.max(PADDING, Math.min(highlighted.top, viewportH - cardHeight - PADDING));
+        } else if (spaceLeft >= cardWidth + PADDING) {
+          left = highlighted.left - cardWidth - GAP;
+          top = Math.max(PADDING, Math.min(highlighted.top, viewportH - cardHeight - PADDING));
         } else {
-          // Fallback: Pick side with maximum space
-          if (spaceBelow >= spaceAbove && spaceBelow >= spaceRight && spaceBelow >= spaceLeft) {
-            top = highlighted.top + highlighted.height + GAP;
-            left = (viewportW - cardWidth) / 2;
-          } else if (spaceAbove >= spaceRight && spaceAbove >= spaceLeft) {
-            top = highlighted.top - cardHeight - GAP;
-            left = (viewportW - cardWidth) / 2;
-          } else if (spaceRight >= spaceLeft) {
-            left = highlighted.left + highlighted.width + GAP;
-            top = (viewportH - cardHeight) / 2;
-          } else {
-            left = highlighted.left - cardWidth - GAP;
-            top = (viewportH - cardHeight) / 2;
-          }
+          // Bottom-right floating dock fallback when target element spans large viewport area
+          top = viewportH - cardHeight - PADDING;
+          left = Math.max(PADDING, viewportW - cardWidth - PADDING);
         }
       }
 
-      // Strict anti-overlap check: if card rectangle overlaps target rectangle, nudge it completely outside
+      // Hard Collision Enforcement: card bounding box MUST NOT intersect highlighted box
       const overlapsX = left < highlighted.left + highlighted.width && left + cardWidth > highlighted.left;
       const overlapsY = top < highlighted.top + highlighted.height && top + cardHeight > highlighted.top;
 
       if (overlapsX && overlapsY) {
-        if (highlighted.top - cardHeight - GAP >= PADDING) {
+        if (highlighted.top >= cardHeight + GAP + PADDING) {
           top = highlighted.top - cardHeight - GAP;
-        } else if (highlighted.top + highlighted.height + GAP + cardHeight <= viewportH - PADDING) {
+        } else {
           top = highlighted.top + highlighted.height + GAP;
-        } else if (highlighted.left - cardWidth - GAP >= PADDING) {
-          left = highlighted.left - cardWidth - GAP;
-        } else if (highlighted.left + highlighted.width + GAP + cardWidth <= viewportW - PADDING) {
-          left = highlighted.left + highlighted.width + GAP;
         }
       }
 
-      // Clamp strictly within viewport
+      // Clamp strictly inside visible viewport
       top = Math.max(PADDING, Math.min(top, viewportH - cardHeight - PADDING));
       left = Math.max(PADDING, Math.min(left, viewportW - cardWidth - PADDING));
 
