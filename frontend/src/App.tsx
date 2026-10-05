@@ -2475,7 +2475,7 @@ function App() {
             <article className="panel map-panel" id="map-explorer" data-tour="map">
               <div className="panel-heading">
                 <div>
-                  <span className="section-overline">INTERACTIVE MAP EXPLORER · SIH 26015</span>
+                  <span className="section-overline">INTERACTIVE MAP EXPLORER</span>
                   <h2>Watershed GIS Workspace</h2>
                   <p>Pan, zoom, switch basemaps & toggle layer tree categories</p>
                 </div>
@@ -3031,7 +3031,7 @@ function App() {
             <button className="tour-welcome-close" aria-label="Explore dashboard" onClick={() => { setWelcomeOpen(false); navigate("/dashboard"); }}><X size={20} /></button>
             <div className="tour-welcome-content">
               <span className="tour-brand-mark"><Droplets size={22} /></span>
-              <span className="tour-eyebrow">JALRAKSHAK AI · SIH 26078</span>
+              <span className="tour-eyebrow">JALRAKSHAK AI</span>
               <h1 id="welcome-title">Smarter Watersheds,<br />Sustainable Agriculture.</h1>
               <p>Watershed work is difficult to verify across large, diverse landscapes. JalRakshak AI brings field photographs, satellite observations, geospatial context, AI-assisted review, and field verification into one evidence-led workflow.</p>
               <div className="welcome-workflow-tags"><span>Geo-tagged field photos</span><span>Satellite observations</span><span>Human verification</span></div>

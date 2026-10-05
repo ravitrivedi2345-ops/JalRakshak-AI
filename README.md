@@ -9,9 +9,9 @@ Traditional watershed monitoring often depends on manual surveys, scattered phot
 
 JalRakshak AI aims to bring these activities together in a unified web-based GIS platform.
 
-## 🎯 Problem Statement
+## 🎯 Focus & Mission
 
-**SIH Problem Statement: 26015 — Watershed Monitoring**
+**Watershed Monitoring & Evidence-Led Verification**
 
 Watershed development requires reliable information about land use, drainage networks, vegetation cover, soil conditions, water bodies, and the progress of interventions. Conventional monitoring processes can be time-consuming, difficult to scale, and challenging to verify across large geographical areas.
 
@@ -251,8 +251,7 @@ Please avoid committing credentials, private datasets, or unverified claims abou
 ## 👥 Team
 
 **Project:** JalRakshak AI  
-**Competition:** Smart India Hackathon (SIH)  
-**Problem Statement:** 26015 — Watershed Monitoring  
+**Domain:** Watershed Intelligence & GIS Monitoring  
 **Institution:** CGC University
 
 Add your team name, team members, mentor, and official problem-statement details here as appropriate.

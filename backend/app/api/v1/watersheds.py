@@ -259,7 +259,7 @@ def get_watershed_boundary(watershed_id: str, db: Session = Depends(get_db)):
 
 @router.get("/{watershed_code}/geojson")
 def get_watershed_geojson(watershed_code: str):
-    """PostGIS ST_AsGeoJSON representation for micro-watersheds (SIH DRISHTI-SRISHTI specs)."""
+    """PostGIS ST_AsGeoJSON representation for micro-watersheds (DRISHTI-SRISHTI specs)."""
     # Sample GeoJSON polygons for Nanded micro-watersheds MW01-MW05 & Barmer
     features = {
         "IWMP-14-MW01": {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[77.28, 19.14], [77.35, 19.18], [77.39, 19.10], [77.31, 19.06], [77.28, 19.14]]]}, "properties": {"watershed_code": "IWMP-14-MW01", "name": "Nalegaon MW-01", "district": "Nanded", "area_ha": 842.5}},
