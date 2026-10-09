@@ -55,11 +55,12 @@ async def api_exception_handler(request: Request, exc: APIException):
         }
     )
 
-# Static file serving for uploads
-os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
-app.mount("/storage/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
-app.mount("/storage/outputs", StaticFiles(directory=settings.OUTPUT_DIR), name="outputs")
+# Static file serving for uploads (skip on Vercel serverless — no persistent disk)
+if settings.APP_ENV != "production" or os.environ.get("VERCEL") is None:
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
+    app.mount("/storage/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+    app.mount("/storage/outputs", StaticFiles(directory=settings.OUTPUT_DIR), name="outputs")
 
 # Include Routers
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
