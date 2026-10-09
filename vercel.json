@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://jalrakshak-backend.onrender.com/api/$1"
+      "destination": "/api/index.py"
     },
     {
       "source": "/(.*)",
@@ -31,3 +31,4 @@
     }
   ]
 }
+
