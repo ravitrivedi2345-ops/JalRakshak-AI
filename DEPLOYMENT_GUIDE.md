@@ -70,10 +70,10 @@ In your Render `jalrakshak-backend` Web Service dashboard ➔ **Environment**, a
 2. Click **Add New...** ➔ **Project**.
 3. Import your GitHub repository (`JalRakshak-AI`).
 4. Configure Project Settings:
-   - **Framework Preset**: Vite
-   - **Root Directory**: `./` (or `frontend`)
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `dist`
+   - **Framework Preset**: Other / None (configured via `vercel.json`)
+   - **Root Directory**: `./` (Root directory)
+   - **Build Command**: `cd frontend && npm install && npm run build`
+   - **Output Directory**: `frontend/dist`
 5. Add Environment Variables:
    - `VITE_API_BASE_URL`: `https://jalrakshak-backend.onrender.com` (Your Render backend live URL)
 6. Click **Deploy**.
