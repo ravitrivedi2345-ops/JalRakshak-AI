@@ -1,34 +1,73 @@
+# ============================================================
+# JalRakshak-AI — .gitignore
+# ============================================================
+
+# ── Node / Frontend ─────────────────────────────────────────
 node_modules/
+frontend/node_modules/
 dist/
 build/
 .cache/
+.vite/
+vite.config.*.timestamp-*
+*.tsbuildinfo
+*-debug.log*
+*.log
+logs/
+
+# ── Environment secrets (keep .env.example) ─────────────────
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 backend/.env
-.vite/
-vite.config.*.timestamp-*
-*.tsbuildinfo
-*-debug.log*
-logs/
-*.log
-.claude-replay.*
-.tmp-*
-/.plugins/
-/.opencode-skills/
+frontend/.env
 
-# Python / Backend ignore
+# ── Root-level duplicate artefacts ──────────────────────────
+# These files live properly inside frontend/ — do NOT track at root
+/src/
+/public/
+/index.html
+/tsconfig.json
+/vite.config.ts
+/package.json
+/package-lock.json
+/pnpm-lock.yaml
+
+# ── Deployment / CI helpers not needed in repo ──────────────
+render.yaml
+CLAUDE.md
+
+# ── Lock-file duplicates ─────────────────────────────────────
+pnpm-lock.yaml
+package-lock.json
+
+# ── Python / Backend ─────────────────────────────────────────
 __pycache__/
 *.pyc
+*.pyo
 .pytest_cache/
+backend/.pytest_cache/
+
+# ── Databases (never commit runtime DB) ─────────────────────
 *.db
 *.sqlite3
+jalrakshak.db
+backend/jalrakshak.db
+
+# ── Runtime storage (user uploads / generated outputs) ──────
 storage/
 backend/storage/uploads/*
 backend/storage/outputs/*
 !backend/storage/uploads/.gitkeep
 !backend/storage/outputs/.gitkeep
 
+# ── Misc ────────────────────────────────────────────────────
+.claude-replay.*
+.tmp-*
+/.plugins/
+/.opencode-skills/
 
+# ── Nested public duplicate ──────────────────────────────────
+frontend/public/public/
