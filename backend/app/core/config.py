@@ -11,9 +11,9 @@ class Settings(BaseSettings):
 
     JWT_SECRET_KEY: str = "jalrakshak_super_secret_jwt_key_2026_change_in_production"
     JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 120
 
-    FRONTEND_ORIGINS: str = "http://localhost:5173,http://localhost:8443,http://127.0.0.1:8443,http://localhost:3000"
+    FRONTEND_ORIGINS: str = "http://localhost:5173,http://localhost:8443,http://127.0.0.1:8443,http://localhost:3000,https://*.vercel.app,https://*.onrender.com"
 
     UPLOAD_DIR: str = "./storage/uploads"
     OUTPUT_DIR: str = "./storage/outputs"
@@ -21,17 +21,29 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    SATELLITE_PROVIDER: str = "mock"
-    SATELLITE_API_URL: str = ""
+    # Satellite Provider credentials (Sentinel Hub & Google Earth Engine)
+    SATELLITE_PROVIDER: str = "sentinel-hub"  # sentinel-hub, gee, or mock
+    SATELLITE_API_URL: str = "https://services.sentinel-hub.com/ogc/wms"
     SATELLITE_API_TOKEN: str = ""
+    SENTINEL_HUB_CLIENT_ID: str = ""
+    SENTINEL_HUB_CLIENT_SECRET: str = ""
+    SENTINEL_HUB_INSTANCE_ID: str = ""
+    GEE_SERVICE_ACCOUNT: str = ""
+    GEE_PRIVATE_KEY: str = ""
 
     AI_MODEL_PATH: str = "./ml/models/intervention_detector.pt"
 
     # Google Gemini AI
     GEMINI_API_KEY: str = ""
 
-
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    @property
+    def normalized_database_url(self) -> str:
+        url = self.DATABASE_URL
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        return url
 
     @property
     def cors_origins(self) -> List[str]:

@@ -80,9 +80,78 @@ export const apiClient = axios.create({
   headers: { Accept: "application/json" },
 });
 
+// Intercept requests to inject JWT Bearer Token if available
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem("jalrakshak_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export function getApiBaseUrl(): string {
   return apiBaseUrl;
 }
+
+export type AuthUser = {
+  username: string;
+  full_name: string;
+  role: string;
+  role_code: "admin" | "verifier" | "viewer";
+  email: string;
+  permissions?: string[];
+};
+
+export async function loginWithRole(username: string, requestedRole?: string): Promise<{ token: string; user: AuthUser }> {
+  try {
+    const { data } = await apiClient.post("/api/v1/auth/login", {
+      username,
+      password: "password",
+      requested_role: requestedRole
+    });
+    const authData = data?.data;
+    if (authData?.access_token) {
+      localStorage.setItem("jalrakshak_token", authData.access_token);
+      localStorage.setItem("jalrakshak_user", JSON.stringify(authData.user));
+    }
+    return { token: authData.access_token, user: authData.user };
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export function getCurrentStoredUser(): AuthUser | null {
+  try {
+    const raw = localStorage.getItem("jalrakshak_user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function logoutUser(): void {
+  localStorage.removeItem("jalrakshak_token");
+  localStorage.removeItem("jalrakshak_user");
+}
+
+export async function fetchSatelliteStatus() {
+  try {
+    const { data } = await apiClient.get("/api/v1/satellite/status");
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function fetchLiveSatelliteWMS(layer: string = "TRUE_COLOR", bbox: string = "71.0,25.0,72.0,26.0") {
+  try {
+    const { data } = await apiClient.get("/api/v1/satellite/live-wms", { params: { layer, bbox } });
+    return data?.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
 
 export function parseApiError(error: unknown): string {
   if (axios.isAxiosError(error)) {

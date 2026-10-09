@@ -24,9 +24,22 @@ import {
   searchBackend,
   submitVerificationTask,
   uploadEvidence,
+  loginWithRole,
+  getCurrentStoredUser,
+  logoutUser,
+  fetchSatelliteStatus,
+  fetchLiveSatelliteWMS,
+  type AuthUser,
   type DetectionResult,
   type OperationMode
 } from "./api";
+import {
+  getOfflineQueue,
+  saveOfflineRecord,
+  syncOfflineQueue,
+  registerServiceWorker,
+  type OfflineRecord
+} from "./offlineSync";
 import { GuidedTour, TourCompletion } from "./GuidedTour";
 import { nextTourStep, previousTourStep, seededDemoDetections, tourSteps } from "./tour";
 import { canTransitionVerification, createReportDisclosure, validateFieldImage } from "./workflows";
@@ -650,6 +663,8 @@ function Sidebar({
   collapsed,
   mobileOpen,
   onClose,
+  currentUser,
+  onOpenRoleModal,
 }: {
   active: string;
   onNavigate: (label: string, id: string) => void;
@@ -658,7 +673,13 @@ function Sidebar({
   collapsed: boolean;
   mobileOpen: boolean;
   onClose: () => void;
+  currentUser?: AuthUser;
+  onOpenRoleModal?: () => void;
 }) {
+  const initials = currentUser?.full_name
+    ? currentUser.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+    : "RT";
+
   return (
     <>
       {mobileOpen && <button className="sidebar-scrim" aria-label="Close navigation" onClick={onClose} />}
@@ -700,10 +721,10 @@ function Sidebar({
             <ChevronRight size={16} />
           </button>
           <button className="nav-item" onClick={onSettings}><Settings size={19} /><span>Settings</span></button>
-          <div className="user-card">
-            <div className="avatar">RT</div>
-            <div className="user-copy"><strong>Ravi Trivedi</strong><span>National Program Officer</span></div>
-            <MoreHorizontal size={18} />
+          <div className="user-card" onClick={onOpenRoleModal} style={{ cursor: "pointer" }} title="Click to switch role (Admin, Verifier, Viewer)">
+            <div className="avatar" style={{ background: currentUser?.role_code === "admin" ? "#7c3aed" : currentUser?.role_code === "viewer" ? "#0284c7" : "#059669" }}>{initials}</div>
+            <div className="user-copy"><strong>{currentUser?.full_name || "Ravi Trivedi"}</strong><span>{currentUser?.role || "Field Verifier"}</span></div>
+            <ChevronRight size={16} style={{ opacity: 0.6 }} />
           </div>
         </div>
       </aside>
@@ -1407,6 +1428,70 @@ function App() {
   const [viewingPhotoModal, setViewingPhotoModal] = useState<{ name: string; url: string; date: string; location: string; gpsCheck: string; notes: string } | null>(null);
   const [bufferDistance, setBufferDistance] = useState<100 | 250 | 500>(250);
   const [satObsDate, setSatObsDate] = useState("2026-10-01");
+
+  // AUTH & MULTI-ROLE STATE
+  const [currentUser, setCurrentUser] = useState<AuthUser>(() => {
+    return getCurrentStoredUser() || {
+      username: "verifier",
+      full_name: "Ravi Trivedi",
+      role: "Field Verifier",
+      role_code: "verifier",
+      email: "verifier@jalrakshak.gov.in",
+      permissions: ["verify_tasks", "upload_evidence", "view_reports"]
+    };
+  });
+  const [roleModalOpen, setRoleModalOpen] = useState(false);
+
+  // PWA & OFFLINE QUEUE STATE
+  const [isOnline, setIsOnline] = useState(() => typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [offlineQueue, setOfflineQueue] = useState<OfflineRecord[]>(() => getOfflineQueue());
+
+  // SATELLITE CREDENTIALS STATUS
+  const [satelliteInfo, setSatelliteInfo] = useState<{ provider?: string; is_configured?: boolean } | null>(null);
+
+  useEffect(() => {
+    registerServiceWorker();
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      setToast("Network reconnected! Synchronizing offline field queue...");
+      syncOfflineQueue(async () => true).then(({ syncedCount }) => {
+        setOfflineQueue(getOfflineQueue());
+        if (syncedCount > 0) {
+          setToast(`Successfully synced ${syncedCount} offline record(s) to server.`);
+        }
+      });
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      setToast("Network connection lost. Operating in Offline Field Mode.");
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    // Fetch live satellite provider status
+    fetchSatelliteStatus()
+      .then((info) => setSatelliteInfo(info))
+      .catch(() => setSatelliteInfo({ provider: "mock", is_configured: false }));
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  const handleSwitchRole = async (roleCode: "admin" | "verifier" | "viewer") => {
+    try {
+      const res = await loginWithRole(roleCode, roleCode);
+      setCurrentUser(res.user);
+      setRoleModalOpen(false);
+      setToast(`Switched active profile to ${res.user.role} (${res.user.full_name})`);
+    } catch (err) {
+      setToast(`Failed to switch role: ${parseApiError(err)}`);
+    }
+  };
 
   const handleToggleLayer = (id: string) => {
     setGisLayers((prev) =>
@@ -2244,6 +2329,8 @@ function App() {
         collapsed={collapsed}
         mobileOpen={mobileOpen}
         onClose={() => setMobileOpen(false)}
+        currentUser={currentUser}
+        onOpenRoleModal={() => setRoleModalOpen(true)}
       />
       <main className="main">
         <header className="topbar">
@@ -2263,6 +2350,16 @@ function App() {
             </div>
           </div>
           <div className="top-actions">
+            {/* NETWORK ONLINE / OFFLINE STATUS BADGE */}
+            <div
+              className={`slim-status-pill ${isOnline ? "badge-connected" : "badge-disconnected"}`}
+              style={{ cursor: "pointer", fontSize: "12px", padding: "4px 10px", display: "flex", alignItems: "center", gap: "6px" }}
+              title={isOnline ? "PWA Online — Connected to network" : "PWA Offline Mode — Field records will queue locally"}
+            >
+              <span className={`status-dot ${isOnline ? "dot-connected" : "dot-disconnected"}`} />
+              <strong>{isOnline ? "Online" : `Offline (${offlineQueue.length})`}</strong>
+            </div>
+
             <label className={`mode-switch ${mode === "demo" ? "mode-demo" : "mode-connected"}`}>
               <span>Mode</span>
               <select aria-label="Application mode" value={mode} onChange={(event) => setMode(event.currentTarget.value === "connected" ? "connected" : "demo")}>
@@ -2291,7 +2388,18 @@ function App() {
                 </div>
               )}
             </div>
-            <div className="top-profile"><span className="avatar">RT</span><span>Ravi Trivedi</span><ChevronDown size={14} /></div>
+            <div
+              className="top-profile"
+              onClick={() => setRoleModalOpen(true)}
+              style={{ cursor: "pointer" }}
+              title="Click to switch user role (Admin, Verifier, Viewer)"
+            >
+              <span className="avatar" style={{ background: currentUser.role_code === "admin" ? "#7c3aed" : currentUser.role_code === "viewer" ? "#0284c7" : "#059669" }}>
+                {currentUser.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+              </span>
+              <span>{currentUser.full_name} ({currentUser.role})</span>
+              <ChevronDown size={14} />
+            </div>
           </div>
         </header>
 
@@ -3008,6 +3116,109 @@ function App() {
             <select id="report-period" className="modal-select" value={reportPeriod} onChange={(event) => setReportPeriod(event.target.value)}><option>This season</option><option>Last 6 months</option><option>Year to date</option></select>
             <div className="report-preview" data-tour="report"><FileText size={19} /><span><strong>JalRakshak AI · {reportScope}</strong><small>{reportPeriod} · {currentDateLabel} · DEMO DATA · illustrative sample records only</small></span></div>
             <div className="modal-actions"><button className="modal-cancel" onClick={() => setReportOpen(false)}>Cancel</button><button className="verify-button" onClick={buildReport}><FileDown size={16} /> Print / save as PDF</button></div>
+          </section>
+        </div>
+      )}
+      {roleModalOpen && (
+        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setRoleModalOpen(false); }}>
+          <section className="workflow-modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="role-modal-title" style={{ maxWidth: "540px" }}>
+            <div className="modal-heading">
+              <div>
+                <span className="section-overline">SECURITY & ROLE-BASED ACCESS CONTROL (RBAC)</span>
+                <h2 id="role-modal-title">Switch Active Role</h2>
+                <p>JWT auth tokens and UI permissions adapt dynamically based on your active role profile.</p>
+              </div>
+              <button className="icon-button" aria-label="Close role switcher" onClick={() => setRoleModalOpen(false)}>
+                <X size={19} />
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", margin: "16px 0" }}>
+              <div
+                onClick={() => handleSwitchRole("admin")}
+                style={{
+                  padding: "14px",
+                  borderRadius: "10px",
+                  border: currentUser.role_code === "admin" ? "2px solid #7c3aed" : "1px solid #cbd5e1",
+                  background: currentUser.role_code === "admin" ? "#f5f3ff" : "#ffffff",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "14px"
+                }}
+              >
+                <div style={{ width: "38px", height: "38px", borderRadius: "8px", background: "#7c3aed", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>
+                  SA
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <strong>Super Administrator</strong>
+                    {currentUser.role_code === "admin" && <span style={{ fontSize: "11px", padding: "2px 8px", background: "#7c3aed", color: "#fff", borderRadius: "12px", fontWeight: 600 }}>Active</span>}
+                  </div>
+                  <small style={{ color: "#64748b", display: "block", marginTop: "2px" }}>
+                    Full system access: edit sites, delete records, verify ground data, manage users, export full PDF reports.
+                  </small>
+                </div>
+              </div>
+
+              <div
+                onClick={() => handleSwitchRole("verifier")}
+                style={{
+                  padding: "14px",
+                  borderRadius: "10px",
+                  border: currentUser.role_code === "verifier" ? "2px solid #059669" : "1px solid #cbd5e1",
+                  background: currentUser.role_code === "verifier" ? "#ecfdf5" : "#ffffff",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "14px"
+                }}
+              >
+                <div style={{ width: "38px", height: "38px", borderRadius: "8px", background: "#059669", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>
+                  FV
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <strong>Field Verification Officer</strong>
+                    {currentUser.role_code === "verifier" && <span style={{ fontSize: "11px", padding: "2px 8px", background: "#059669", color: "#fff", borderRadius: "12px", fontWeight: 600 }}>Active</span>}
+                  </div>
+                  <small style={{ color: "#64748b", display: "block", marginTop: "2px" }}>
+                    Field ground staff: upload EXIF photo evidence, conduct audits, approve or reject verification checks.
+                  </small>
+                </div>
+              </div>
+
+              <div
+                onClick={() => handleSwitchRole("viewer")}
+                style={{
+                  padding: "14px",
+                  borderRadius: "10px",
+                  border: currentUser.role_code === "viewer" ? "2px solid #0284c7" : "1px solid #cbd5e1",
+                  background: currentUser.role_code === "viewer" ? "#f0f9ff" : "#ffffff",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "14px"
+                }}
+              >
+                <div style={{ width: "38px", height: "38px", borderRadius: "8px", background: "#0284c7", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>
+                  PA
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <strong>Public / Regional Auditor</strong>
+                    {currentUser.role_code === "viewer" && <span style={{ fontSize: "11px", padding: "2px 8px", background: "#0284c7", color: "#fff", borderRadius: "12px", fontWeight: 600 }}>Active</span>}
+                  </div>
+                  <small style={{ color: "#64748b", display: "block", marginTop: "2px" }}>
+                    Read-only stakeholder mode: browse GIS maps, inspect satellite indicators, view public summaries.
+                  </small>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="modal-cancel" onClick={() => setRoleModalOpen(false)}>Close</button>
+            </div>
           </section>
         </div>
       )}
