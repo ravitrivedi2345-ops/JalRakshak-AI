@@ -306,7 +306,7 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
       mapInstance.addControl(new AttributionControl({ compact: true }), "bottom-right");
 
       mapInstance.on("load", () => {
-        if (isDisposed) return;
+        if (isDisposed || !mapInstance) return;
         mapRef.current = mapInstance;
         renderMapFeatures(mapInstance, filteredWaterbodies);
       });

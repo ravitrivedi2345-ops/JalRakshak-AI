@@ -1682,8 +1682,8 @@ function MapPanel({
         <span>LON: {mouseCoords.lng}° E</span>
         <span>ZOOM: {mouseCoords.zoom}</span>
         <span>CRS: WGS84</span>
-        <span style={{ borderLeft: "1px solid rgba(255,255,255,0.2)", paddingLeft: "8px", color: mapboxToken ? "#86efac" : "#fde68a" }}>
-          {mapboxToken ? "Mapbox Public Engine" : "Carto/Esri Raster Engine"}
+        <span style={{ borderLeft: "1px solid rgba(255,255,255,0.2)", paddingLeft: "8px", color: "#86efac" }}>
+          Esri / Carto GIS Engine
         </span>
       </div>
 
@@ -1704,7 +1704,7 @@ function MapPanel({
       </div>
 
       <div className="map-credit">
-        {mapboxToken ? "Basemap © Mapbox, Sentinel-2, OpenStreetMap contributors" : basemap === "satellite" ? "Satellite imagery © Esri, Maxar and contributors" : "Map tiles © OpenStreetMap & CARTO"}
+        {basemap === "satellite" ? "Satellite imagery © Esri, Maxar and contributors" : "Map tiles © OpenStreetMap & Esri"}
       </div>
     </div>
   );

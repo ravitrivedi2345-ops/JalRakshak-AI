@@ -1273,6 +1273,7 @@ export async function recordBathymetricReading(
     surface_area_ha?: number;
     sensor_type?: string;
     sensor_id?: string;
+    recorded_by?: string;
     notes?: string;
   }
 ): Promise<any> {

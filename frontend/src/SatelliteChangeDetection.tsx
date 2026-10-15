@@ -321,7 +321,7 @@ export default function SatelliteChangeDetection({
     setLoadingBathymetry(true);
     setBathymetryError(null);
     try {
-      const currentArea = analysisResult?.later_area_ha || selectedWaterbody?.area_hectares;
+      const currentArea = (analysisResult?.later_area_ha ?? selectedWaterbody?.area_hectares) ?? undefined;
       const data = await fetchBathymetryProfile(selectedWbId, currentArea);
       setBathymetryData(data);
       if (data.coupled_metrics?.measured_depth_m) {
@@ -1258,7 +1258,7 @@ export default function SatelliteChangeDetection({
                 <div className="flex items-center gap-2">
                   <Sparkles size={14} className="text-amber-400 shrink-0" />
                   <span className="font-semibold text-amber-200">
-                    {selectedWaterbody && selectedWaterbody.area_hectares < 0.5
+                    {selectedWaterbody && (selectedWaterbody.area_hectares ?? 0) < 0.5
                       ? "Micro-Pond (< 0.5 ha) · Edge-Vulnerable"
                       : "Standard Waterbody (> 0.5 ha)"}
                   </span>
@@ -1266,7 +1266,7 @@ export default function SatelliteChangeDetection({
                 <p className="text-slate-300 text-[11px] leading-relaxed">
                   In ponds under 0.2 ha, a standard 10m Sentinel-2 pixel (100 m²) covers up to 50% of the pond's total surface.
                   Shoreline pixels capture mixed reflectance of shallow water, silt, and masonry ghats. Linear Spectral Unmixing (LSU)
-                  resolves continuous water fractions ($f_{water}$) per sub-pixel.
+                  resolves continuous water fractions (f_water) per sub-pixel.
                 </p>
               </div>
             </div>
@@ -1445,7 +1445,7 @@ export default function SatelliteChangeDetection({
                             : "text-slate-400 hover:text-slate-200"
                         }`}
                       >
-                        Water Fraction ($f_{water}$) Heatmap
+                        Water Fraction (f_water) Heatmap
                       </button>
                       <button
                         type="button"
