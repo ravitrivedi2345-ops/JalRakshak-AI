@@ -35,6 +35,7 @@ class Waterbody(Base):
     restorations = relationship("WaterbodyRestoration", back_populates="waterbody", cascade="all, delete-orphan", order_by="desc(WaterbodyRestoration.start_date)")
     photos = relationship("WaterbodyFieldPhoto", back_populates="waterbody", cascade="all, delete-orphan", order_by="desc(WaterbodyFieldPhoto.taken_at)")
     change_detections = relationship("WaterbodyChangeDetection", back_populates="waterbody", cascade="all, delete-orphan", order_by="desc(WaterbodyChangeDetection.created_at)")
+    bathymetry_readings = relationship("WaterbodyBathymetryReading", back_populates="waterbody", cascade="all, delete-orphan", order_by="desc(WaterbodyBathymetryReading.reading_date)")
 
 
 class WaterbodyInspection(Base):
@@ -143,4 +144,27 @@ class WaterbodyChangeDetection(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     waterbody = relationship("Waterbody", back_populates="change_detections")
+
+
+class WaterbodyBathymetryReading(Base):
+    __tablename__ = "waterbody_bathymetry_readings"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    waterbody_id = Column(String, ForeignKey("waterbodies.id"), nullable=False, index=True)
+    reading_date = Column(DateTime(timezone=True), nullable=False)
+    water_level_m = Column(Float, nullable=False)  # Measured depth from sensor in meters
+    max_depth_m = Column(Float, nullable=False, default=3.5)
+    sensor_type = Column(String, nullable=False, default="ultrasonic_gauge")  # ultrasonic_gauge, hydrostatic, staff_gauge, sonar
+    sensor_id = Column(String, nullable=False, default="US-PATNA-01")
+    surface_area_ha = Column(Float, nullable=False)  # Concurrent satellite surface spread in ha
+    computed_volume_m3 = Column(Float, nullable=False)  # Basin storage volume in m3
+    storage_capacity_m3 = Column(Float, nullable=False)  # Full storage capacity in m3
+    volume_percentage = Column(Float, nullable=False)  # % of maximum capacity
+    water_deficit_m3 = Column(Float, nullable=False, default=0.0)
+    alert_triggered = Column(Boolean, default=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    waterbody = relationship("Waterbody", back_populates="bathymetry_readings")
+
 

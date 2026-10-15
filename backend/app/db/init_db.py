@@ -7,7 +7,7 @@ from app.models.watershed import Watershed
 from app.models.intervention import Intervention
 from app.models.verification import VerificationTaskModel
 from app.models.notification import Notification
-from app.models.waterbody import Waterbody, WaterbodyInspection, WaterbodyMeasurement, WaterbodyRestoration, WaterbodyFieldPhoto, WaterbodyChangeDetection
+from app.models.waterbody import Waterbody, WaterbodyInspection, WaterbodyMeasurement, WaterbodyRestoration, WaterbodyFieldPhoto, WaterbodyChangeDetection, WaterbodyBathymetryReading
 from app.db.seed_waterbodies import seed_patna_waterbodies
 from app.core.security import get_password_hash
 

@@ -125,3 +125,69 @@ def test_api_compatibility_alias():
     response = client.get("/api/waterbodies/wb-patna-001/satellite-availability")
     assert response.status_code == 200
     assert response.json()["success"] is True
+
+
+def test_satellite_cron_status():
+    response = client.get("/api/v1/waterbodies/satellite-cron/status")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["target_tile"] == "T45RTT"
+    assert data["polling_interval_days"] == 5
+    assert data["status"] == "active"
+    assert data["shrinkage_alert_threshold_pct"] == 10.0
+
+
+def test_satellite_cron_trigger():
+    response = client.post("/api/v1/waterbodies/satellite-cron/trigger")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "success"
+    assert data["tile_id"] == "T45RTT"
+    assert data["waterbodies_processed"] > 0
+
+
+def test_subpixel_hybrid_fusion():
+    payload = {
+        "observation_date": "2026-04-16",
+        "ndwi_threshold": 0.0,
+        "target_sensor": "PlanetScope / UAV Super-Resolution (3m)"
+    }
+    response = client.post("/api/v1/waterbodies/wb-patna-001/subpixel-fusion", json=payload)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["waterbody_id"] == "wb-patna-001"
+    assert data["fused_resolution_m"] < 5.0
+    assert "measurements" in data
+    assert "standard_sentinel2_10m_area_ha" in data["measurements"]
+    assert "fused_high_res_3m_area_ha" in data["measurements"]
+    assert data["visuals"]["fused_true_color_url"].startswith("data:image/png;base64,")
+    assert data["visuals"]["subpixel_fraction_url"].startswith("data:image/png;base64,")
+
+
+def test_bathymetry_profile_and_volumetric_calculation():
+    response = client.get("/api/v1/waterbodies/wb-patna-001/bathymetry?surface_area_ha=4.2")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["waterbody_id"] == "wb-patna-001"
+    assert "sensor_metadata" in data
+    assert "coupled_metrics" in data
+    assert data["coupled_metrics"]["computed_volume_m3"] > 0
+    assert data["coupled_metrics"]["storage_capacity_m3"] > 0
+    assert len(data["trend"]) > 0
+
+
+def test_bathymetry_record_reading():
+    payload = {
+        "water_level_m": 2.45,
+        "surface_area_ha": 4.1,
+        "sensor_type": "ultrasonic_depth_gauge",
+        "sensor_id": "US-PATNA-001",
+        "notes": "Field validation sonar check"
+    }
+    response = client.post("/api/v1/waterbodies/wb-patna-001/bathymetry/record", json=payload)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["water_level_m"] == 2.45
+    assert data["computed_volume_m3"] > 0
+    assert "volume_percentage" in data
+

@@ -14,6 +14,7 @@ from app.models.waterbody import (
     WaterbodyRestoration,
     WaterbodyFieldPhoto,
     WaterbodyChangeDetection,
+    WaterbodyBathymetryReading,
 )
 from app.core.exceptions import create_success_response, create_error_response
 from app.core.security import decode_access_token
@@ -22,6 +23,17 @@ from app.services.satellite_change_service import (
     run_satellite_change_detection,
     generate_change_detection_csv,
     generate_change_detection_pdf_bytes,
+)
+from app.services.satellite_cron_service import (
+    get_satellite_cron_status,
+    run_cron_ingestion_cycle,
+)
+from app.services.subpixel_fusion_service import (
+    execute_subpixel_hybrid_fusion,
+)
+from app.services.bathymetry_service import (
+    get_waterbody_bathymetry_summary,
+    record_bathymetry_reading,
 )
 
 class ChangeDetectionRequest(BaseModel):
@@ -32,6 +44,18 @@ class ChangeDetectionRequest(BaseModel):
     min_change_ha: float = Field(default=0.03, ge=0.01, le=1.0, description="Minimum change threshold in hectares")
     save_to_history: bool = Field(default=True, description="Persist analysis to database history")
     record_measurement: bool = Field(default=False, description="Also record later observation in waterbody measurements timeline")
+
+class SubPixelFusionRequest(BaseModel):
+    observation_date: str = Field(default="2026-04-16", description="Observation date (YYYY-MM-DD)")
+    ndwi_threshold: float = Field(default=0.0, ge=-0.5, le=0.5)
+    target_sensor: str = Field(default="PlanetScope / UAV Super-Resolution (3m)")
+
+class BathymetryRecordRequest(BaseModel):
+    water_level_m: float = Field(..., ge=0.05, le=25.0, description="Measured water level in meters")
+    surface_area_ha: Optional[float] = Field(None, ge=0.01)
+    sensor_type: str = Field(default="ultrasonic_depth_gauge")
+    sensor_id: str = Field(default="US-PATNA-01")
+    notes: Optional[str] = None
 
 router = APIRouter(prefix="/waterbodies", tags=["Waterbody Explorer (Patna)"])
 
@@ -268,6 +292,33 @@ def list_waterbodies(
             "pages": (total_count + limit - 1) // limit if limit > 0 else 1
         },
         message="Waterbodies retrieved successfully"
+    )
+
+
+@router.get("/satellite-cron/status")
+def get_cron_status():
+    """
+    Retrieve status of the background Copernicus Sentinel-2 5-day overpass
+    ingestion cycle for Tile T45RTT (Patna, Bihar) and active shrinkage alerts.
+    """
+    status_data = get_satellite_cron_status()
+    return create_success_response(
+        data=status_data,
+        message="Copernicus Sentinel-2 cron ingestion status retrieved"
+    )
+
+
+@router.post("/satellite-cron/trigger")
+def trigger_cron_ingestion(db: Session = Depends(get_db)):
+    """
+    Manually trigger an automated Copernicus Sentinel-2 overpass ingestion run
+    across all monitored waterbodies in Patna. Automatically generates alerts
+    if any waterbody experiences shrinkage > 10%.
+    """
+    report = run_cron_ingestion_cycle(db)
+    return create_success_response(
+        data=report,
+        message="Automated Copernicus Sentinel-2 overpass ingestion cycle completed"
     )
 
 
@@ -783,4 +834,90 @@ def export_change_detection_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+@router.post("/{waterbody_id}/subpixel-fusion")
+def compute_subpixel_fusion(
+    payload: SubPixelFusionRequest,
+    waterbody_id: str = Path(..., description="Unique waterbody identifier"),
+    db: Session = Depends(get_db)
+):
+    """
+    Execute high-resolution Sub-Pixel Hybrid Resolution Fusion (3m PlanetScope / UAV Super-Resolution)
+    for micro-ponds (< 0.2 ha) or fine urban waterbodies in Patna. Decomposes 10m Sentinel-2
+    mixed pixels into continuous water fractions.
+    """
+    wb = db.query(Waterbody).filter(Waterbody.id == waterbody_id).first()
+    if not wb:
+        return create_error_response(status_code=404, code="NOT_FOUND", message=f"Waterbody '{waterbody_id}' not found")
+
+    try:
+        fusion_result = execute_subpixel_hybrid_fusion(
+            waterbody_id=wb.id,
+            waterbody_name=wb.name,
+            center_lat=wb.latitude,
+            center_lon=wb.longitude,
+            boundary_geojson_str=wb.boundary_geojson,
+            baseline_area_ha=wb.area_hectares,
+            observation_date=payload.observation_date,
+            ndwi_threshold=payload.ndwi_threshold,
+            target_sensor=payload.target_sensor
+        )
+        return create_success_response(
+            data=fusion_result,
+            message="Sub-pixel hybrid resolution fusion computed successfully"
+        )
+    except Exception as e:
+        return create_error_response(status_code=500, code="FUSION_FAILED", message=f"Sub-pixel fusion error: {str(e)}")
+
+
+@router.get("/{waterbody_id}/bathymetry")
+def get_bathymetry_profile(
+    waterbody_id: str = Path(..., description="Unique waterbody identifier"),
+    surface_area_ha: Optional[float] = Query(None, description="Optional concurrent satellite surface area (ha)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve coupled optical surface spread (ha) and ultrasonic bathymetric depth gauge (m)
+    measurements to determine volumetric storage capacity (m3), active volume, and water deficit.
+    """
+    wb = db.query(Waterbody).filter(Waterbody.id == waterbody_id).first()
+    if not wb:
+        return create_error_response(status_code=404, code="NOT_FOUND", message=f"Waterbody '{waterbody_id}' not found")
+
+    profile = get_waterbody_bathymetry_summary(wb, db, latest_satellite_area_ha=surface_area_ha)
+    return create_success_response(
+        data=profile,
+        message="Coupled bathymetry and volumetric profile retrieved"
+    )
+
+
+@router.post("/{waterbody_id}/bathymetry/record")
+def record_bathymetric_depth(
+    payload: BathymetryRecordRequest,
+    waterbody_id: str = Path(..., description="Unique waterbody identifier"),
+    db: Session = Depends(get_db)
+):
+    """
+    Record a new field or IoT telemetric ultrasonic depth gauge reading, recalculating
+    the active volumetric storage in cubic meters (m3).
+    """
+    wb = db.query(Waterbody).filter(Waterbody.id == waterbody_id).first()
+    if not wb:
+        return create_error_response(status_code=404, code="NOT_FOUND", message=f"Waterbody '{waterbody_id}' not found")
+
+    try:
+        res = record_bathymetry_reading(
+            db=db,
+            waterbody_id=wb.id,
+            water_level_m=payload.water_level_m,
+            surface_area_ha=payload.surface_area_ha,
+            sensor_type=payload.sensor_type,
+            sensor_id=payload.sensor_id,
+            notes=payload.notes
+        )
+        return create_success_response(data=res, message="Bathymetric reading recorded successfully")
+    except Exception as e:
+        return create_error_response(status_code=500, code="RECORD_FAILED", message=str(e))
+
 
