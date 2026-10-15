@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "node -e \"const fs=require('fs'),cp=require('child_process');if(fs.existsSync('frontend')){cp.execSync('cd frontend && npm install --legacy-peer-deps && npm run build',{stdio:'inherit'});fs.cpSync('frontend/dist','dist',{recursive:true});}else{cp.execSync('npm run build',{stdio:'inherit'});}\"",
+  "buildCommand": "node build.js",
   "outputDirectory": "dist",
   "functions": {
     "api/index.py": {
