@@ -169,3 +169,65 @@ def test_get_feature_detail_view():
     # Invalid Feature
     r_404 = client.get("/api/v1/map/features/watershed/non-existent-id-999")
     assert r_404.status_code == 404
+
+
+def test_study_areas_endpoints():
+    """Verify 6 study areas listing, search filtering, GeoJSON retrieval, and custom boundary upload."""
+    # 1. List all 6 study areas
+    r_list = client.get("/api/v1/map/study-areas")
+    assert r_list.status_code == 200
+    areas = r_list.json()["data"]
+    assert len(areas) == 6
+
+    ids = [a["id"] for a in areas]
+    assert "kolar-sub-basin" in ids
+    assert "raichur-tungabhadra-catchment" in ids
+    assert "anantapur-arid-watershed" in ids
+    assert "bundelkhand-recharge-zone" in ids
+    assert "vidarbha-basin" in ids
+    assert "thar-canal-command-area" in ids
+
+    # 2. Check validation statuses
+    anantapur = next(a for a in areas if a["id"] == "anantapur-arid-watershed")
+    assert anantapur["boundary_status"] == "verified"
+    assert anantapur["region"] == "Andhra Pradesh"
+    assert "Ananthapuramu" in anantapur["aliases"]
+
+    kolar = next(a for a in areas if a["id"] == "kolar-sub-basin")
+    assert kolar["boundary_status"] == "pending_verification"
+    assert "Karnataka" in kolar["disambiguation_notes"]
+
+    # 3. Search query
+    r_search = client.get("/api/v1/map/study-areas?q=Tungabhadra")
+    assert r_search.status_code == 200
+    search_data = r_search.json()["data"]
+    assert len(search_data) == 1
+    assert search_data[0]["id"] == "raichur-tungabhadra-catchment"
+
+    # 4. Single GeoJSON detail
+    r_detail = client.get("/api/v1/map/study-areas/bundelkhand-recharge-zone")
+    assert r_detail.status_code == 200
+    feat = r_detail.json()["data"]
+    assert feat["type"] == "Feature"
+    assert feat["geometry"]["type"] == "Polygon"
+    assert feat["properties"]["name"] == "Bundelkhand Recharge Zone"
+    assert len(feat["properties"]["bbox"]) == 4
+
+    # 5. Full Collection
+    r_coll = client.get("/api/v1/map/study-areas/collection")
+    assert r_coll.status_code == 200
+    coll = r_coll.json()["data"]
+    assert coll["type"] == "FeatureCollection"
+    assert len(coll["features"]) == 6
+
+    # 6. Upload boundary update
+    new_coords = [[[76.80, 22.70], [77.35, 22.70], [77.40, 23.05], [76.80, 23.05], [76.80, 22.70]]]
+    r_upload = client.post(
+        "/api/v1/map/study-areas/kolar-sub-basin/upload-boundary",
+        json={"coordinates": new_coords, "source_label": "SLUSI Verified 2026 Survey"}
+    )
+    assert r_upload.status_code == 200
+    up_data = r_upload.json()["data"]
+    assert up_data["properties"]["boundary_status"] == "verified_custom"
+    assert "SLUSI" in up_data["properties"]["boundary_source"]
+

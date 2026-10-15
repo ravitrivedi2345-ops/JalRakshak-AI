@@ -4,8 +4,9 @@ Provides spatial endpoints for administrative boundaries, watershed boundaries,
 hydrological drainage networks, water bodies, conservation structures, and geographic search.
 """
 
-from typing import Optional, Tuple
-from fastapi import APIRouter, Query, Path, status
+from typing import Optional, Tuple, List, Dict, Any
+from pydantic import BaseModel, Field
+from fastapi import APIRouter, Query, Path, Body, status
 from app.core.exceptions import create_success_response, create_error_response
 from app.services.spatial_data_service import (
     MAP_LAYERS_REGISTRY,
@@ -15,9 +16,19 @@ from app.services.spatial_data_service import (
     get_interventions_geojson,
     search_geographic_features,
     get_feature_details,
+    get_study_areas_summary,
+    get_study_area_geojson,
+    get_all_study_areas_collection,
+    update_study_area_custom_boundary,
 )
 
 router = APIRouter(prefix="/map", tags=["Interactive Watershed Map Explorer"])
+
+
+class UploadBoundaryPayload(BaseModel):
+    coordinates: List[List[List[float]]] = Field(..., description="Polygon coordinates [[[lon, lat], ...]]")
+    source_label: str = Field("Field GIS Survey", description="Citation or source label for uploaded boundary")
+
 
 
 def parse_bbox_param(bbox_str: Optional[str]) -> Optional[Tuple[float, float, float, float]]:
@@ -158,3 +169,83 @@ def get_feature_detail_view(
         data=detail,
         message="Feature details retrieved successfully"
     )
+
+
+# ---------------------------------------------------------------------------
+# Study Areas Endpoints (Section 10 Requirement)
+# ---------------------------------------------------------------------------
+
+@router.get("/study-areas")
+def list_study_areas(
+    q: Optional[str] = Query(None, description="Optional search filter by name, region, or alias")
+):
+    """
+    Retrieve list of 6 preset watershed and water-management study areas across India
+    with validation status, bounding box, center, and purpose metadata.
+    """
+    study_areas = get_study_areas_summary(query=q)
+    return create_success_response(
+        data=study_areas,
+        message=f"Retrieved {len(study_areas)} study areas"
+    )
+
+
+@router.get("/study-areas/collection")
+def get_study_areas_geojson_collection():
+    """
+    Retrieve full GeoJSON FeatureCollection containing all 6 study areas
+    and their boundary polygons.
+    """
+    collection = get_all_study_areas_collection()
+    return create_success_response(
+        data=collection,
+        message="Study areas GeoJSON FeatureCollection retrieved successfully"
+    )
+
+
+@router.get("/study-areas/{study_area_id}")
+def get_study_area_detail(
+    study_area_id: str = Path(..., description="Unique study area identifier (e.g. 'anantapur-arid-watershed')")
+):
+    """
+    Retrieve single study area GeoJSON Feature with boundary geometry,
+    verification status, bounding box, center, and available GIS layers.
+    """
+    feature = get_study_area_geojson(study_area_id=study_area_id)
+    if not feature:
+        return create_error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="STUDY_AREA_NOT_FOUND",
+            message=f"Study area '{study_area_id}' not found in registry"
+        )
+    return create_success_response(
+        data=feature,
+        message=f"Study area '{study_area_id}' retrieved successfully"
+    )
+
+
+@router.post("/study-areas/{study_area_id}/upload-boundary")
+def upload_study_area_boundary(
+    study_area_id: str = Path(..., description="Study area to update with verified boundary"),
+    payload: UploadBoundaryPayload = Body(...)
+):
+    """
+    Update study area boundary with uploaded verified geometry, upgrading status
+    from pending_verification to verified_custom.
+    """
+    updated = update_study_area_custom_boundary(
+        study_area_id=study_area_id,
+        coordinates=payload.coordinates,
+        source_label=payload.source_label
+    )
+    if not updated:
+        return create_error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="STUDY_AREA_NOT_FOUND",
+            message=f"Study area '{study_area_id}' not found to update"
+        )
+    return create_success_response(
+        data=updated,
+        message=f"Custom boundary uploaded and verified for study area '{study_area_id}'"
+    )
+

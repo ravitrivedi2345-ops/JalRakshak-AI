@@ -77,3 +77,31 @@ export interface QuickRegionPreset {
   bounds?: [[number, number], [number, number]];
   description: string;
 }
+
+export type BoundaryValidationStatus = "verified" | "pending_verification" | "sample_curated" | "verified_custom";
+
+export interface StudyAreaItem {
+  id: string;
+  name: string;
+  aliases: string[];
+  region: string;
+  boundary_status: BoundaryValidationStatus;
+  boundary_source?: string | null;
+  center: [number, number];
+  zoom: number;
+  bbox: [number, number, number, number];
+  area_sqkm: number;
+  calculated_area_ha?: number;
+  purpose: string;
+  description: string;
+  disambiguation_notes?: string | null;
+  available_layers: string[];
+  layer_counts: {
+    streams?: number;
+    waterbodies?: number;
+    interventions?: number;
+  };
+  has_boundary_geometry?: boolean;
+  geometry?: any;
+}
+

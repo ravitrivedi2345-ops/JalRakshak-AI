@@ -103,7 +103,13 @@ import {
   fetchHydrology,
   fetchInterventions as fetchGisInterventions,
   searchMapFeatures,
+  fetchStudyAreas,
+  FALLBACK_STUDY_AREAS,
 } from "./map/mapApi";
+import type { StudyAreaItem } from "./map/mapTypes";
+import StudyAreaSelector from "./map/StudyAreaSelector";
+import UploadBoundaryModal from "./map/UploadBoundaryModal";
+
 
 type Site = {
   id: string;
@@ -754,6 +760,10 @@ function MapPanel({
   uploadedCoordinates,
   selectedWatershedId,
   gisLayers,
+  selectedStudyArea,
+  onClearStudyArea,
+  onUploadBoundary,
+  zoomAction,
 }: {
   layer: string;
   selectedSite: string;
@@ -763,6 +773,10 @@ function MapPanel({
   uploadedCoordinates: [number, number] | null;
   selectedWatershedId?: string;
   gisLayers?: LayerItemDef[];
+  selectedStudyArea?: StudyAreaItem | null;
+  onClearStudyArea?: () => void;
+  onUploadBoundary?: (id: string) => void;
+  zoomAction?: { type: "all" | "reset"; timestamp: number } | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -1068,6 +1082,24 @@ function MapPanel({
       setSource("src-waterbodies", waterbodies);
       setSource("src-interventions-points", points, true);
       setSource("src-interventions-lines", lines, false);
+      setSource("src-study-area", { type: "FeatureCollection", features: [] });
+
+      if (!map.getLayer("layer-study-area-fill")) {
+        map.addLayer({
+          id: "layer-study-area-fill",
+          type: "fill",
+          source: "src-study-area",
+          paint: { "fill-color": "#0d9488", "fill-opacity": 0.22 },
+        });
+      }
+      if (!map.getLayer("layer-study-area-line")) {
+        map.addLayer({
+          id: "layer-study-area-line",
+          type: "line",
+          source: "src-study-area",
+          paint: { "line-color": "#14b8a6", "line-width": 3.0, "line-dasharray": [3, 2], "line-opacity": 0.95 },
+        });
+      }
 
       if (!map.getLayer("layer-admin-national")) {
         map.addLayer({
@@ -1543,6 +1575,61 @@ function MapPanel({
     });
   }, [attentionOnly, visibleSiteIds]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (zoomAction) {
+      if (zoomAction.type === "all") {
+        map.fitBounds([[68.0, 12.0], [84.0, 31.0]], { padding: 40, duration: 1200 });
+        return;
+      }
+      if (zoomAction.type === "reset") {
+        map.flyTo({ center: [82, 22], zoom: 3.8, pitch: 0, duration: 1000 });
+        return;
+      }
+    }
+
+    const source = map.getSource("src-study-area") as any;
+    if (!selectedStudyArea) {
+      if (source) {
+        source.setData({ type: "FeatureCollection", features: [] });
+      }
+      return;
+    }
+
+    if (source && selectedStudyArea.geometry) {
+      source.setData({
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            id: selectedStudyArea.id,
+            properties: { ...selectedStudyArea },
+            geometry: selectedStudyArea.geometry,
+          },
+        ],
+      });
+    }
+
+    if (selectedStudyArea.bbox && selectedStudyArea.bbox.length === 4) {
+      const [minX, minY, maxX, maxY] = selectedStudyArea.bbox;
+      map.fitBounds(
+        [
+          [minX, minY],
+          [maxX, maxY],
+        ],
+        { padding: 60, duration: 1200, maxZoom: 13 }
+      );
+    } else if (selectedStudyArea.center) {
+      map.flyTo({
+        center: selectedStudyArea.center,
+        zoom: selectedStudyArea.zoom || 9.5,
+        duration: 1200,
+      });
+    }
+  }, [selectedStudyArea, zoomAction]);
+
   return (
     <div className={`map-frame map-canvas-container ${isFullscreen ? "map-fullscreen-active" : ""}`}>
       <div className="map-top-bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
@@ -1676,6 +1763,121 @@ function MapPanel({
 
       {mapStatus === "loading" && <div className="map-status"><span className="map-spinner" /> Loading geospatial layers…</div>}
       {mapStatus === "error" && <div className="map-status map-status-error">Street map unavailable · showing sample site positions</div>}
+
+      {/* Floating Active Study Area Card (Section 10 Requirement) */}
+      {selectedStudyArea && (
+        <div
+          style={{
+            position: "absolute",
+            top: "54px",
+            left: "14px",
+            zIndex: 25,
+            maxWidth: "340px",
+            background: "rgba(15, 23, 42, 0.94)",
+            border: "1px solid rgba(20, 184, 166, 0.5)",
+            borderRadius: "12px",
+            padding: "12px 14px",
+            boxShadow: "0 16px 36px rgba(0,0,0,0.35)",
+            backdropFilter: "blur(8px)",
+            color: "#f8fafc",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px", marginBottom: "6px" }}>
+            <div>
+              <div style={{ fontSize: "10px", fontWeight: 700, color: "#2dd4bf", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                WATERSHED STUDY AREA
+              </div>
+              <h4 style={{ margin: "2px 0 0 0", fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>
+                {selectedStudyArea.name}
+              </h4>
+              <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+                {selectedStudyArea.region}
+              </span>
+            </div>
+            {onClearStudyArea && (
+              <button
+                type="button"
+                onClick={onClearStudyArea}
+                style={{ background: "transparent", border: 0, color: "#94a3b8", cursor: "pointer", padding: "2px" }}
+                title="Exit study area focus"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", margin: "6px 0" }}>
+            <span
+              style={{
+                fontSize: "10px",
+                fontWeight: 700,
+                padding: "2px 6px",
+                borderRadius: "4px",
+                background: selectedStudyArea.boundary_status === "verified" ? "rgba(16, 185, 129, 0.2)" : "rgba(245, 158, 11, 0.2)",
+                color: selectedStudyArea.boundary_status === "verified" ? "#6ee7b7" : "#fcd34d",
+                border: `1px solid ${selectedStudyArea.boundary_status === "verified" ? "rgba(16, 185, 129, 0.4)" : "rgba(245, 158, 11, 0.4)"}`,
+              }}
+            >
+              {selectedStudyArea.boundary_status === "verified"
+                ? "VERIFIED BOUNDARY"
+                : selectedStudyArea.boundary_status === "sample_curated"
+                ? "PROVISIONAL / SAMPLE"
+                : "PENDING VERIFICATION"}
+            </span>
+            <span style={{ fontSize: "11px", fontFamily: "monospace", color: "#cbd5e1" }}>
+              {selectedStudyArea.area_sqkm.toLocaleString()} km²
+            </span>
+          </div>
+
+          <p style={{ fontSize: "11.5px", color: "#cbd5e1", lineHeight: 1.4, margin: "6px 0 8px 0" }}>
+            {selectedStudyArea.purpose}
+          </p>
+
+          {selectedStudyArea.disambiguation_notes && (
+            <div
+              style={{
+                padding: "6px 8px",
+                background: "rgba(120, 53, 15, 0.3)",
+                border: "1px solid rgba(217, 119, 6, 0.4)",
+                borderRadius: "6px",
+                fontSize: "10.5px",
+                color: "#fef3c7",
+                marginBottom: "8px",
+                lineHeight: 1.3,
+              }}
+            >
+              <strong>Validation Note:</strong> {selectedStudyArea.disambiguation_notes}
+            </div>
+          )}
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", fontSize: "10.5px", color: "#94a3b8", paddingTop: "6px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "180px" }}>
+              Src: {selectedStudyArea.boundary_source ? selectedStudyArea.boundary_source.split("&")[0] : "CGWB / WRIS"}
+            </span>
+            {selectedStudyArea.boundary_status === "pending_verification" && onUploadBoundary && (
+              <button
+                type="button"
+                onClick={() => onUploadBoundary(selectedStudyArea.id)}
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  padding: "3px 8px",
+                  borderRadius: "6px",
+                  background: "#0d9488",
+                  color: "#ffffff",
+                  border: 0,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}
+              >
+                <Upload size={11} /> Confirm / Upload
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="map-coordinates-bar">
         <span>LAT: {mouseCoords.lat}° N</span>
@@ -1928,6 +2130,96 @@ function App() {
 
   // SATELLITE CREDENTIALS STATUS
   const [satelliteInfo, setSatelliteInfo] = useState<{ provider?: string; is_configured?: boolean } | null>(null);
+
+  // PRESET STUDY AREAS STATE (Section 10 Requirement)
+  const [studyAreas, setStudyAreas] = useState<StudyAreaItem[]>(FALLBACK_STUDY_AREAS);
+  const [selectedStudyArea, setSelectedStudyArea] = useState<StudyAreaItem | null>(null);
+  const [uploadBoundaryModalAreaId, setUploadBoundaryModalAreaId] = useState<string | null>(null);
+  const [mapZoomAction, setMapZoomAction] = useState<{ type: "all" | "reset"; timestamp: number } | null>(null);
+
+  useEffect(() => {
+    fetchStudyAreas().then((data) => {
+      if (data && data.length > 0) {
+        setStudyAreas(data);
+      }
+    });
+  }, []);
+
+  // Listen to URL search param ?study_area=...
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const areaIdFromUrl = params.get("study_area");
+    if (areaIdFromUrl) {
+      const match = studyAreas.find(
+        (a) => a.id === areaIdFromUrl || a.aliases.some((al) => al.toLowerCase() === areaIdFromUrl.toLowerCase())
+      );
+      if (match && selectedStudyArea?.id !== match.id) {
+        setSelectedStudyArea(match);
+      }
+    }
+  }, [studyAreas]);
+
+  // Sync URL when selectedStudyArea changes
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (selectedStudyArea) {
+      params.set("study_area", selectedStudyArea.id);
+    } else {
+      params.delete("study_area");
+    }
+    const newQuery = params.toString() ? "?" + params.toString() : "";
+    window.history.replaceState(null, "", window.location.pathname + newQuery);
+  }, [selectedStudyArea]);
+
+  const handleSelectStudyArea = (area: StudyAreaItem) => {
+    setSelectedStudyArea(area);
+    setToast(`Study area focused: ${area.name} (${area.region})`);
+    setGisLayers((prev) =>
+      prev.map((l) => {
+        if (
+          l.id === "boundary-watershed" ||
+          l.id === "hydro-streams" ||
+          l.id === "hydro-waterbodies" ||
+          l.id === "interventions-checkdams" ||
+          l.id === "interventions-farmponds" ||
+          l.id === "interventions-recharge"
+        ) {
+          return { ...l, defaultVisible: true };
+        }
+        return l;
+      })
+    );
+  };
+
+  const handleClearStudyArea = () => {
+    setSelectedStudyArea(null);
+    setToast("Study area focus cleared");
+  };
+
+  const handleShowAllStudyAreas = () => {
+    setSelectedStudyArea(null);
+    setMapZoomAction({ type: "all", timestamp: Date.now() });
+    setToast("Zoomed out to show all 6 national study areas across India");
+  };
+
+  const handleResetStudyAreaMap = () => {
+    setSelectedStudyArea(null);
+    setMapZoomAction({ type: "reset", timestamp: Date.now() });
+    setToast("Map view reset to default all-India extent");
+  };
+
+  const handleBoundaryUploadSuccess = (updatedFeature: any) => {
+    const p = updatedFeature?.properties;
+    if (!p) return;
+    setStudyAreas((prev) =>
+      prev.map((a) => (a.id === p.id ? { ...a, ...p, geometry: updatedFeature.geometry } : a))
+    );
+    if (selectedStudyArea?.id === p.id) {
+      setSelectedStudyArea({ ...selectedStudyArea, ...p, geometry: updatedFeature.geometry });
+    }
+    setToast(`Official boundary uploaded & verified for ${p.name || "study area"}!`);
+  };
+
 
   useEffect(() => {
     registerServiceWorker();
@@ -3187,6 +3479,19 @@ function App() {
                 </div>
               </div>
 
+              {/* 10. Watershed Study Area Selector (Section 10) */}
+              <div style={{ marginBottom: "14px" }}>
+                <StudyAreaSelector
+                  studyAreas={studyAreas}
+                  selectedStudyArea={selectedStudyArea}
+                  onSelectStudyArea={handleSelectStudyArea}
+                  onClearStudyArea={handleClearStudyArea}
+                  onShowAllStudyAreas={handleShowAllStudyAreas}
+                  onResetMap={handleResetStudyAreaMap}
+                  onUploadBoundary={(id) => setUploadBoundaryModalAreaId(id)}
+                />
+              </div>
+
               <div className="map-explorer-layout">
                 <LayerExplorerCard
                   layers={gisLayers}
@@ -3202,6 +3507,10 @@ function App() {
                   onSelectSite={onSelectSite}
                   selectedWatershedId={selectedWatershedFilter}
                   gisLayers={gisLayers}
+                  selectedStudyArea={selectedStudyArea}
+                  onClearStudyArea={handleClearStudyArea}
+                  onUploadBoundary={(id) => setUploadBoundaryModalAreaId(id)}
+                  zoomAction={mapZoomAction}
                 />
               </div>
 
@@ -3883,6 +4192,13 @@ function App() {
         />
       )}
       {tourComplete && <TourCompletion onRestart={() => openTour(0)} onDashboard={exitTour} />}
+      <UploadBoundaryModal
+        isOpen={Boolean(uploadBoundaryModalAreaId)}
+        studyAreaId={uploadBoundaryModalAreaId || ""}
+        studyAreaName={studyAreas.find((a) => a.id === uploadBoundaryModalAreaId)?.name || ""}
+        onClose={() => setUploadBoundaryModalAreaId(null)}
+        onSuccess={handleBoundaryUploadSuccess}
+      />
       <button className="collapse-floating" aria-label="Collapse sidebar" onClick={() => setCollapsed((value) => !value)}><Menu size={18} /></button>
     </div>
   );

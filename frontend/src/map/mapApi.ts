@@ -1,6 +1,6 @@
 import axios from "axios";
 import { getApiBaseUrl } from "../api";
-import { MapLayerItem, SearchResultItem, FeatureDetail } from "./mapTypes";
+import { MapLayerItem, SearchResultItem, FeatureDetail, StudyAreaItem } from "./mapTypes";
 
 const api = axios.create({
   timeout: 10000,
@@ -401,3 +401,197 @@ export async function fetchFeatureDetails(featureType: string, featureId: string
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Preset Watershed Study Areas API (Section 10 Requirement)
+// ---------------------------------------------------------------------------
+
+export const FALLBACK_STUDY_AREAS: StudyAreaItem[] = [
+  {
+    id: "kolar-sub-basin",
+    name: "Kolar Sub-Basin",
+    aliases: ["Kolar", "Kolar Sub Basin", "Kolar Watershed", "Kolar MP"],
+    region: "Madhya Pradesh",
+    boundary_status: "pending_verification",
+    boundary_source: "Central Ground Water Board (CGWB) & Narmada Basin Authority (Provisional)",
+    center: [77.10, 22.85],
+    zoom: 10.0,
+    bbox: [76.80, 22.65, 77.45, 23.10],
+    area_sqkm: 1350.4,
+    purpose: "Watershed assessment, drainage analysis, water-body mapping and intervention monitoring.",
+    description: "Narmada tributary catchment in Sehore and Raisen districts feeding Kolar Dam. Requires administrator confirmation regarding disambiguation from Kolar, Karnataka.",
+    disambiguation_notes: "Identified as the Kolar River watershed (Narmada Basin, MP), not to be confused with Kolar District in Karnataka. Upload official SLUSI shapefile if alternate delineation is intended.",
+    available_layers: ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds"],
+    layer_counts: { streams: 8, waterbodies: 4, interventions: 12 },
+    has_boundary_geometry: true,
+    geometry: {
+      type: "Polygon",
+      coordinates: [[[76.85, 22.65], [77.30, 22.65], [77.45, 22.95], [77.20, 23.10], [76.80, 22.95], [76.85, 22.65]]]
+    }
+  },
+  {
+    id: "raichur-tungabhadra-catchment",
+    name: "Raichur–Tungabhadra Catchment",
+    aliases: ["Raichur", "Tungabhadra Catchment", "Raichur Tungabhadra", "Tungabhadra Basin"],
+    region: "Karnataka (extending across state boundaries)",
+    boundary_status: "sample_curated",
+    boundary_source: "Krishna–Tungabhadra Basin Atlas & Karnataka WRD (Provisional Multi-State Boundary)",
+    center: [77.15, 15.95],
+    zoom: 9.5,
+    bbox: [76.50, 15.30, 77.65, 16.30],
+    area_sqkm: 3120.8,
+    purpose: "River network analysis, water-body monitoring and conservation-structure mapping.",
+    description: "Semi-arid inter-state river confluence catchment between Tungabhadra and Krishna rivers, characterized by intense canal irrigation and gully erosion.",
+    disambiguation_notes: "Catchment extends across Raichur (Karnataka), Jogulamba Gadwal (Telangana) and Kurnool (Andhra Pradesh).",
+    available_layers: ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds", "interventions-recharge"],
+    layer_counts: { streams: 16, waterbodies: 9, interventions: 21 },
+    has_boundary_geometry: true,
+    geometry: {
+      type: "Polygon",
+      coordinates: [[[76.50, 15.40], [77.20, 15.30], [77.65, 15.85], [77.50, 16.30], [76.80, 16.20], [76.50, 15.40]]]
+    }
+  },
+  {
+    id: "anantapur-arid-watershed",
+    name: "Anantapur Arid Watershed",
+    aliases: ["Anantapur", "Ananthapuramu", "Anantapur Arid Watershed", "Rayalaseema"],
+    region: "Andhra Pradesh",
+    boundary_status: "verified",
+    boundary_source: "AP Space Applications Centre (APSAC) & CGWB Drought Area Program",
+    center: [77.60, 14.68],
+    zoom: 9.5,
+    bbox: [77.10, 14.15, 78.10, 15.15],
+    area_sqkm: 2840.5,
+    purpose: "Dryland watershed analysis, vegetation monitoring, water harvesting and land-degradation assessment.",
+    description: "Severely rain-shadowed drought-prone zone in southern AP with high subsurface infiltration potential and extensive farm pond construction programs.",
+    disambiguation_notes: null,
+    available_layers: ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-farmponds", "interventions-recharge"],
+    layer_counts: { streams: 11, waterbodies: 6, interventions: 24 },
+    has_boundary_geometry: true,
+    geometry: {
+      type: "Polygon",
+      coordinates: [[[77.10, 14.20], [77.85, 14.15], [78.10, 14.90], [77.70, 15.15], [77.20, 14.85], [77.10, 14.20]]]
+    }
+  },
+  {
+    id: "bundelkhand-recharge-zone",
+    name: "Bundelkhand Recharge Zone",
+    aliases: ["Bundelkhand", "Bundelkhand Recharge", "Bundelkhand Watershed", "Ken-Betwa Zone"],
+    region: "Uttar Pradesh and Madhya Pradesh",
+    boundary_status: "verified",
+    boundary_source: "CGWB Special Bundelkhand Drought Mitigation Project & SLUSI",
+    center: [79.45, 25.10],
+    zoom: 9.0,
+    bbox: [78.60, 24.40, 80.40, 25.75],
+    area_sqkm: 4210.0,
+    purpose: "Groundwater recharge planning, drainage analysis, water harvesting and vegetation monitoring.",
+    description: "Hard-rock crystalline terrain spanning Jhansi, Lalitpur, Tikamgarh, and Mahoba prone to recurring agricultural droughts and seasonal stream desiccation.",
+    disambiguation_notes: null,
+    available_layers: ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds"],
+    layer_counts: { streams: 22, waterbodies: 14, interventions: 35 },
+    has_boundary_geometry: true,
+    geometry: {
+      type: "Polygon",
+      coordinates: [[[78.60, 24.50], [79.80, 24.40], [80.40, 25.20], [79.90, 25.75], [78.75, 25.60], [78.60, 24.50]]]
+    }
+  },
+  {
+    id: "vidarbha-basin",
+    name: "Vidarbha Basin",
+    aliases: ["Vidarbha", "Vidarbha Watershed", "Vidarbha Basin", "Wainganga-Wardha"],
+    region: "Maharashtra",
+    boundary_status: "sample_curated",
+    boundary_source: "Godavari-Wainganga Sub-basin Authority & GSDA Maharashtra (Provisional)",
+    center: [79.25, 20.90],
+    zoom: 8.8,
+    bbox: [78.20, 20.10, 80.25, 21.65],
+    area_sqkm: 4850.2,
+    purpose: "Water-body assessment, agricultural landscape monitoring, vegetation analysis and watershed intervention mapping.",
+    description: "Black-cotton basaltic plateau covering Nagpur, Wardha, and Chandrapur districts; focus area for farm percolation ponds and gully plugging.",
+    disambiguation_notes: "Wardha-Wainganga catchment delineation. Verify micro-watershed boundary against local Jalyukt Shivar GIS layers.",
+    available_layers: ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds"],
+    layer_counts: { streams: 19, waterbodies: 11, interventions: 28 },
+    has_boundary_geometry: true,
+    geometry: {
+      type: "Polygon",
+      coordinates: [[[78.20, 20.20], [79.60, 20.10], [80.25, 21.10], [79.80, 21.65], [78.40, 21.40], [78.20, 20.20]]]
+    }
+  },
+  {
+    id: "thar-canal-command-area",
+    name: "Thar Canal Command Area",
+    aliases: ["Thar Canal", "Rajasthan Canal Command", "Indira Gandhi Canal Command", "IGNP Command"],
+    region: "Western Rajasthan",
+    boundary_status: "verified",
+    boundary_source: "IGNP Command Area Development Authority & WRD Rajasthan",
+    center: [72.10, 27.85],
+    zoom: 8.5,
+    bbox: [70.80, 26.60, 73.20, 28.80],
+    area_sqkm: 5420.0,
+    purpose: "Irrigation-command mapping, drainage analysis, water-body monitoring and vegetation-change assessment.",
+    description: "Hyper-arid dune landscape converted by the Indira Gandhi Canal network; exhibits acute seepage waterlogging and soil salinization requiring precise spatial monitoring.",
+    disambiguation_notes: null,
+    available_layers: ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-farmponds"],
+    layer_counts: { streams: 7, waterbodies: 5, interventions: 16 },
+    has_boundary_geometry: true,
+    geometry: {
+      type: "Polygon",
+      coordinates: [[[70.80, 26.90], [71.90, 26.60], [73.20, 28.20], [72.60, 28.80], [71.20, 27.90], [70.80, 26.90]]]
+    }
+  }
+];
+
+export async function fetchStudyAreas(query?: string): Promise<StudyAreaItem[]> {
+  try {
+    const params = query ? { q: query } : {};
+    const { data } = await api.get("/api/v1/map/study-areas", { params });
+    if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
+      return data.data;
+    }
+  } catch {
+    // Return fallback
+  }
+
+  if (query) {
+    const q = query.toLowerCase().trim();
+    return FALLBACK_STUDY_AREAS.filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) ||
+        a.region.toLowerCase().includes(q) ||
+        a.aliases.some((al: string) => al.toLowerCase().includes(q))
+    );
+  }
+  return FALLBACK_STUDY_AREAS;
+}
+
+export async function fetchStudyAreaDetail(studyAreaId: string): Promise<any> {
+  try {
+    const { data } = await api.get(`/api/v1/map/study-areas/${studyAreaId}`);
+    if (data?.data) return data.data;
+  } catch {
+    // Return fallback
+  }
+  const fallback = FALLBACK_STUDY_AREAS.find((a) => a.id === studyAreaId);
+  if (fallback) {
+    return {
+      type: "Feature",
+      id: fallback.id,
+      properties: { ...fallback },
+      geometry: fallback.geometry
+    };
+  }
+  return null;
+}
+
+export async function uploadStudyAreaBoundary(
+  studyAreaId: string,
+  coordinates: number[][][],
+  sourceLabel: string = "Admin Uploaded Shapefile"
+): Promise<any> {
+  const { data } = await api.post(`/api/v1/map/study-areas/${studyAreaId}/upload-boundary`, {
+    coordinates,
+    source_label: sourceLabel,
+  });
+  return data?.data;
+}
+
