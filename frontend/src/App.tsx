@@ -96,6 +96,7 @@ type Icon = ComponentType<{ size?: number; strokeWidth?: number; className?: str
 const DemoIndexChart = lazy(() => import("./DemoIndexChart"));
 const WaterbodyExplorer = lazy(() => import("./WaterbodyExplorer"));
 const SatelliteChangeDetection = lazy(() => import("./SatelliteChangeDetection"));
+const MapExplorer = lazy(() => import("./map/MapExplorer"));
 
 type Site = {
   id: string;
@@ -2376,6 +2377,29 @@ function App() {
     );
   }
 
+  if (tourStepIndex === null && active === "Map explorer") {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex h-screen w-full items-center justify-center bg-slate-950 text-emerald-400 font-sans">
+            <Waves className="animate-spin mr-3 text-emerald-400" size={32} />
+            <span className="text-sm font-semibold tracking-wide text-slate-200">
+              Loading Interactive Watershed Map Explorer...
+            </span>
+          </div>
+        }
+      >
+        <MapExplorer
+          onBackToDashboard={() => handleNavigate("Overview", "top")}
+          onLaunchSatelliteChange={(wbId) => {
+            setSelectedSatelliteWaterbodyId(wbId);
+            handleNavigate("Satellite Change", "satellite-change");
+          }}
+        />
+      </Suspense>
+    );
+  }
+
   return (
     <div className={`app-shell min-h-screen bg-[#f4f7f3] ${collapsed ? "nav-is-collapsed" : ""} ${printReport ? "report-print-mode" : ""}`} id="top">
       <Sidebar
@@ -2652,6 +2676,26 @@ function App() {
                   <p>Pan, zoom, switch basemaps & toggle layer tree categories</p>
                 </div>
                 <div className="map-heading-actions">
+                  <button
+                    className="report-button"
+                    style={{
+                      background: "rgba(16, 185, 129, 0.12)",
+                      color: "#059669",
+                      border: "1px solid rgba(16, 185, 129, 0.35)",
+                      padding: "5px 12px",
+                      fontSize: "12px",
+                      borderRadius: "8px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                    onClick={() => handleNavigate("Map explorer", "top")}
+                    title="Open Fullscreen Interactive Watershed GIS Map Explorer"
+                  >
+                    <MapIcon size={15} /> GIS Map Explorer
+                  </button>
                   <button
                     className="report-button"
                     style={{

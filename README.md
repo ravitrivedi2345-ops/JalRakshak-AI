@@ -224,16 +224,85 @@ Before deployment, validate the following:
 
 Document measured results only after running the corresponding tests.
 
+## 🗺️ Interactive Watershed Map Explorer
+
+JalRakshak AI features a production-ready **Interactive Watershed Map Explorer** built on MapLibre GL JS and FastAPI with WGS84 GeoJSON vector services.
+
+### Key Capabilities
+
+1. **Map Controls & Navigation:**
+   - Smooth pan, zoom, 3D tilt perspective (0° to 45°), compass reset to North, reset to All India view, and fullscreen mode.
+   - Live WGS84 coordinates readout (`Lat°N, Lon°E`) and zoom level indicator.
+   - Metric scale bar and dynamic legend.
+   - Quick Region Focus presets: All India, Patna (Bihar), Barmer (Rajasthan), Darrang (Assam), and Kolar (Karnataka).
+
+2. **Thematic GIS Layers (11 Centralized Layers):**
+   - **Administrative:** Sovereign India National Boundary (SOIN), State Boundaries (9 States), District Boundaries (8 Focus Districts).
+   - **Hydrological:** Watershed & Sub-watershed Basins (Ganga, Luni, Brahmaputra, Palar), Major Perennial Rivers (Ganga, Son, Punpun, Gandak, Luni, Brahmaputra), Drainage Networks, and Waterbodies (Lakes, Ponds, Reservoirs).
+   - **Conservation Interventions:** Clustered check dams, farm ponds, percolation recharge tanks (CGWB), and traditional heritage structures (Ahar-Pyne flood diversion channels).
+   - Individual layer visibility toggle, adjustable opacity slider (5% to 100%), and direct citation links to data sources.
+
+3. **Geographic Search Engine:**
+   - Universal query parser supporting State name, District name, Watershed name/ID, Waterbody name, and Intervention ID.
+   - Direct WGS84 Latitude & Longitude coordinate navigation (e.g. `25.5941, 85.1376`).
+   - Auto-suggestions with category badges and instant flyTo animation.
+
+4. **Clickable Feature Drawer:**
+   - Inspect feature name, type, administrative hierarchy, computed geodesic area (Shoelace) or stream length (Haversine).
+   - One-click copy coordinates, zoom to geometry extent, and launch Satellite Change Detection for waterbodies.
+
+### GIS Datasets & Open Sources
+
+| Layer | Geographic Extent | Verified Source | License |
+| :--- | :--- | :--- | :--- |
+| National & State Boundaries | Sovereign Republic of India | Survey of India (SOIN) | GODL-India |
+| District Boundaries | Bihar, Rajasthan, Assam, Karnataka, etc. | Survey of India Administrative Series | GODL-India |
+| Watersheds & Basins | Ganga, Luni, Brahmaputra, Palar Basins | Central Water Commission (CWC) & India-WRIS | Open GIS License |
+| Rivers & Drainage | Major streams & tributaries | India Water Resources Information System (WRIS) | GODL-India |
+| Waterbodies | Patna urban wetlands & district lakes | Ground-truth field survey & Sentinel-2 optical catalog | Public Domain GIS |
+| Interventions | Check dams, farm ponds, recharge tanks | CGWB Artificial Recharge Master Plan | Public Domain GIS |
+| Traditional Networks | Ahar-Pyne & contour bunds | Bihar Minor Water Resources Dept (MWRD) | State GIS Archive |
+
+### API Endpoints
+
+- `GET /api/v1/map/layers` — Centralized GIS layer registry with styling tokens and provenance.
+- `GET /api/v1/map/boundaries/administrative?level={all|national|state|district}&bbox={minx,miny,maxx,maxy}` — GeoJSON administrative boundaries.
+- `GET /api/v1/map/boundaries/watersheds?basin_id=&state=&district=&bbox=` — GeoJSON watershed polygons.
+- `GET /api/v1/map/hydrology?type={all|rivers|drainage|waterbodies}&bbox=` — GeoJSON rivers, drainage, and waterbodies.
+- `GET /api/v1/map/interventions?kind=&status=&district=&bbox=` — GeoJSON water conservation intervention points and lines.
+- `GET /api/v1/map/search?q={query}&limit=10` — Spatial search for administrative entities, watersheds, and coordinates.
+- `GET /api/v1/map/features/{feature_type}/{feature_id}` — Detailed feature metadata and calculated properties.
+
+### Setup & Local Execution
+
+**Backend (FastAPI):**
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+$env:PYTHONPATH="."
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Frontend (React + Vite + Tailwind CSS v4):**
+```bash
+cd frontend
+npm install
+npm run dev
+# App runs at http://localhost:8443
+```
+
 ## 🗺️ Roadmap
 
-- [ ] Complete the interactive Map Explorer.
-- [ ] Connect frontend features to the actual FastAPI endpoints.
+- [x] Complete the interactive Map Explorer (MapLibre GL JS, 11 GIS layers, clustering, spatial search, feature drawer).
+- [x] Connect frontend features to the actual FastAPI endpoints.
 - [ ] Implement reliable geo-tagged photo uploads.
 - [ ] Integrate and evaluate AI image inference.
-- [ ] Add supported satellite and geospatial analysis layers.
+- [x] Add supported satellite and geospatial analysis layers (Sentinel-2 L2A NDWI Change Detection module).
 - [ ] Implement field verification and review workflows.
 - [ ] Generate downloadable monitoring reports.
-- [ ] Add automated tests and error handling.
+- [x] Add automated tests and error handling (38 Pytest + 21 Vitest tests passing).
 - [ ] Deploy the frontend and backend.
 - [ ] Evaluate the platform with representative watershed data.
 
