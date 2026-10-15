@@ -89,11 +89,13 @@ import {
   FileSpreadsheet,
   Calendar,
   AlertTriangle,
+  Satellite,
 } from "lucide-react";
 
 type Icon = ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
 const DemoIndexChart = lazy(() => import("./DemoIndexChart"));
 const WaterbodyExplorer = lazy(() => import("./WaterbodyExplorer"));
+const SatelliteChangeDetection = lazy(() => import("./SatelliteChangeDetection"));
 
 type Site = {
   id: string;
@@ -135,6 +137,7 @@ type DemoVerificationTask = {
 const navItems: { label: string; icon: Icon; id: string; count?: number }[] = [
   { label: "Overview", icon: LayoutDashboard, id: "top" },
   { label: "Waterbody Explorer", icon: Waves, id: "waterbody-explorer", count: 15 },
+  { label: "Satellite Change", icon: Satellite, id: "satellite-change" },
   { label: "Map explorer", icon: MapIcon, id: "map-explorer" },
   { label: "Interventions", icon: Droplets, id: "intervention-mix" },
   { label: "Photo analysis", icon: ScanLine, id: "photo-analysis" },
@@ -1385,6 +1388,7 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const [active, setActive] = useState("Overview");
+  const [selectedSatelliteWaterbodyId, setSelectedSatelliteWaterbodyId] = useState<string>("wb-patna-001");
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mode, setMode] = useState<OperationMode>(() => {
@@ -2337,7 +2341,37 @@ function App() {
           </div>
         }
       >
-        <WaterbodyExplorer onBackToDashboard={() => handleNavigate("Overview", "top")} />
+        <WaterbodyExplorer
+          onBackToDashboard={() => handleNavigate("Overview", "top")}
+          onLaunchChangeDetection={(wbId) => {
+            setSelectedSatelliteWaterbodyId(wbId);
+            handleNavigate("Satellite Change", "satellite-change");
+          }}
+        />
+      </Suspense>
+    );
+  }
+
+  if (active === "Satellite Change") {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex h-screen w-full items-center justify-center bg-slate-950 text-cyan-400 font-sans">
+            <Waves className="animate-spin mr-3 text-cyan-400" size={32} />
+            <span className="text-sm font-semibold tracking-wide text-slate-200">
+              Loading Satellite Change Detection (Sentinel-2 L2A)...
+            </span>
+          </div>
+        }
+      >
+        <SatelliteChangeDetection
+          initialWaterbodyId={selectedSatelliteWaterbodyId}
+          onBackToDashboard={() => handleNavigate("Overview", "top")}
+          onNavigateToWaterbodyExplorer={(wbId) => {
+            if (wbId) setSelectedSatelliteWaterbodyId(wbId);
+            handleNavigate("Waterbody Explorer", "waterbody-explorer");
+          }}
+        />
       </Suspense>
     );
   }
@@ -2962,6 +2996,13 @@ function App() {
               <div className="chart-legend"><span><i className="legend-ndvi" /> NDVI · vegetation signal</span><span><i className="legend-ndwi" /> NDWI · water signal</span></div>
               <DeferredDemoChart data={dynamicIndexSeries} />
               <div className="chart-callout"><span className="callout-icon"><Leaf size={16} /></span><p><strong>{mode === "demo" ? "DEMO DATA · Simulated index trend" : "CONNECTED MODE · Sentinel-2 Trend"}</strong>{mode === "demo" ? " NDVI/NDWI shapes are illustrative only." : " Measured vegetation and water indices retrieved from FastAPI backend."}</p><span className="callout-value">{mode === "demo" ? "DEMO" : "LIVE"}</span></div>
+              <button
+                className="link-button"
+                style={{ marginTop: "12px", display: "inline-flex", alignItems: "center", gap: "6px", fontWeight: 600, color: "#0284c7" }}
+                onClick={() => handleNavigate("Satellite Change", "satellite-change")}
+              >
+                Launch Satellite Change Detection Module (Patna Waterbodies) <ArrowRight size={15} />
+              </button>
             </article>
 
             <article className="panel intervention-panel" id="intervention-mix">

@@ -34,6 +34,7 @@ class Waterbody(Base):
     measurements = relationship("WaterbodyMeasurement", back_populates="waterbody", cascade="all, delete-orphan", order_by="desc(WaterbodyMeasurement.measurement_date)")
     restorations = relationship("WaterbodyRestoration", back_populates="waterbody", cascade="all, delete-orphan", order_by="desc(WaterbodyRestoration.start_date)")
     photos = relationship("WaterbodyFieldPhoto", back_populates="waterbody", cascade="all, delete-orphan", order_by="desc(WaterbodyFieldPhoto.taken_at)")
+    change_detections = relationship("WaterbodyChangeDetection", back_populates="waterbody", cascade="all, delete-orphan", order_by="desc(WaterbodyChangeDetection.created_at)")
 
 
 class WaterbodyInspection(Base):
@@ -103,3 +104,43 @@ class WaterbodyFieldPhoto(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     waterbody = relationship("Waterbody", back_populates="photos")
+
+
+class WaterbodyChangeDetection(Base):
+    __tablename__ = "waterbody_change_detections"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    waterbody_id = Column(String, ForeignKey("waterbodies.id"), nullable=False, index=True)
+    earlier_date = Column(String, nullable=False)
+    later_date = Column(String, nullable=False)
+    ndwi_threshold = Column(Float, nullable=False, default=0.0)
+    tolerance_pct = Column(Float, nullable=False, default=3.0)
+
+    earlier_area_ha = Column(Float, nullable=False)
+    later_area_ha = Column(Float, nullable=False)
+    change_ha = Column(Float, nullable=False)
+    change_pct = Column(Float, nullable=True)
+
+    classification = Column(String, nullable=False)  # shrinkage, expansion, stable, inconclusive
+    classification_reason = Column(Text, nullable=False)
+    confidence_score = Column(Float, nullable=False, default=90.0)
+
+    earlier_cloud_cover_pct = Column(Float, nullable=False, default=0.0)
+    later_cloud_cover_pct = Column(Float, nullable=False, default=0.0)
+    earlier_valid_coverage_pct = Column(Float, nullable=False, default=100.0)
+    later_valid_coverage_pct = Column(Float, nullable=False, default=100.0)
+
+    satellite_sensor = Column(String, nullable=False, default="Sentinel-2 MSI Level-2A")
+    data_source = Column(String, nullable=False, default="Copernicus Sentinel-2 Surface Reflectance (L2A)")
+
+    earlier_true_color_url = Column(Text, nullable=True)
+    later_true_color_url = Column(Text, nullable=True)
+    earlier_ndwi_mask_url = Column(Text, nullable=True)
+    later_ndwi_mask_url = Column(Text, nullable=True)
+    diff_map_url = Column(Text, nullable=True)
+
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    waterbody = relationship("Waterbody", back_populates="change_detections")
+

@@ -46,7 +46,8 @@ import {
   BadgeAlert,
   Sparkles,
   Eye,
-  Database
+  Database,
+  Satellite
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -114,9 +115,10 @@ const PRIORITY_BADGES: Record<PriorityLevel, { label: string; className: string 
 
 interface WaterbodyExplorerProps {
   onBackToDashboard?: () => void;
+  onLaunchChangeDetection?: (waterbodyId: string) => void;
 }
 
-export default function WaterbodyExplorer({ onBackToDashboard }: WaterbodyExplorerProps) {
+export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDetection }: WaterbodyExplorerProps) {
   // State
   const [waterbodies, setWaterbodies] = useState<WaterbodyItem[]>([]);
   const [summary, setSummary] = useState<WaterbodySummary | null>(null);
@@ -904,6 +906,18 @@ export default function WaterbodyExplorer({ onBackToDashboard }: WaterbodyExplor
               <span className="text-[11px] text-slate-300">
                 {selectedWaterbody.area_hectares ? `${selectedWaterbody.area_hectares} hectares` : "Area unverified"}
               </span>
+            </div>
+
+            {/* Quick Action: Satellite Change Detection */}
+            <div className="p-3 bg-slate-900/90 border-b border-slate-800">
+              <button
+                onClick={() => onLaunchChangeDetection?.(selectedWaterbody.id)}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs shadow-md shadow-cyan-950 transition-all active:scale-[0.98]"
+              >
+                <Satellite size={15} />
+                <span>Satellite Change Detection (Sentinel-2 L2A)</span>
+                <ChevronRight size={14} className="opacity-70" />
+              </button>
             </div>
 
             {/* Drawer Tabs */}

@@ -7,8 +7,9 @@ from app.models.watershed import Watershed
 from app.models.intervention import Intervention
 from app.models.verification import VerificationTaskModel
 from app.models.notification import Notification
-from app.models.waterbody import Waterbody, WaterbodyInspection, WaterbodyMeasurement, WaterbodyRestoration, WaterbodyFieldPhoto
+from app.models.waterbody import Waterbody, WaterbodyInspection, WaterbodyMeasurement, WaterbodyRestoration, WaterbodyFieldPhoto, WaterbodyChangeDetection
 from app.db.seed_waterbodies import seed_patna_waterbodies
+from app.core.security import get_password_hash
 
 def init_db(db: Session):
     Base.metadata.create_all(bind=engine)
@@ -20,7 +21,7 @@ def init_db(db: Session):
             email="ravi.trivedi@jalrakshak.gov.in",
             full_name="Ravi Trivedi",
             role="officer",
-            hashed_password=get_password_hash("password123")
+            hashed_password=get_password_hash("password")
         ))
 
     # Seed Watersheds

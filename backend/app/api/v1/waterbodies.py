@@ -1,6 +1,8 @@
 import json
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, Depends, Query, Path, Request, status
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, Query, Path, Request, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, desc, asc
 
@@ -11,9 +13,25 @@ from app.models.waterbody import (
     WaterbodyMeasurement,
     WaterbodyRestoration,
     WaterbodyFieldPhoto,
+    WaterbodyChangeDetection,
 )
 from app.core.exceptions import create_success_response, create_error_response
 from app.core.security import decode_access_token
+from app.services.satellite_change_service import (
+    get_patna_sentinel_availability,
+    run_satellite_change_detection,
+    generate_change_detection_csv,
+    generate_change_detection_pdf_bytes,
+)
+
+class ChangeDetectionRequest(BaseModel):
+    earlier_date: str = Field(..., description="Earlier observation date (YYYY-MM-DD)")
+    later_date: str = Field(..., description="Later observation date (YYYY-MM-DD)")
+    ndwi_threshold: float = Field(default=0.0, ge=-0.5, le=0.5, description="NDWI threshold for water classification (-0.50 to +0.50)")
+    tolerance_pct: float = Field(default=3.0, ge=0.5, le=20.0, description="Tolerance percentage for stable classification")
+    min_change_ha: float = Field(default=0.03, ge=0.01, le=1.0, description="Minimum change threshold in hectares")
+    save_to_history: bool = Field(default=True, description="Persist analysis to database history")
+    record_measurement: bool = Field(default=False, description="Also record later observation in waterbody measurements timeline")
 
 router = APIRouter(prefix="/waterbodies", tags=["Waterbody Explorer (Patna)"])
 
@@ -442,3 +460,327 @@ def get_waterbody_inspections(
         },
         message="Inspections retrieved"
     )
+
+
+@router.get("/{waterbody_id}/satellite-availability")
+def get_satellite_availability(
+    waterbody_id: str = Path(..., description="Unique waterbody identifier"),
+    start_date: Optional[str] = Query(None, description="Start date filter (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date filter (YYYY-MM-DD)"),
+    max_cloud_cover: float = Query(35.0, ge=0.0, le=100.0, description="Maximum acceptable cloud cover percentage"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve available Sentinel-2 Level-2A surface reflectance overpass scenes
+    covering the selected waterbody in Patna, Bihar (Tile 45RTT).
+    """
+    wb = db.query(Waterbody).filter(Waterbody.id == waterbody_id).first()
+    if not wb:
+        return create_error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="NOT_FOUND",
+            message=f"Waterbody with ID '{waterbody_id}' not found"
+        )
+
+    scenes = get_patna_sentinel_availability(
+        waterbody_id=wb.id,
+        start_date=start_date,
+        end_date=end_date,
+        max_cloud_cover=max_cloud_cover
+    )
+
+    return create_success_response(
+        data={
+            "waterbody_id": wb.id,
+            "waterbody_name": wb.name,
+            "district": wb.district,
+            "state": wb.state,
+            "coordinates": {"latitude": wb.latitude, "longitude": wb.longitude},
+            "sensor": "Sentinel-2 MSI Level-2A (Surface Reflectance / BOA)",
+            "tile": "T45RTT",
+            "revisit_interval_days": 5,
+            "total_scenes_available": len(scenes),
+            "scenes": scenes,
+            "recommended_pair": {
+                "earlier_date": "2025-05-21",
+                "later_date": "2025-10-23",
+                "label": "Pre-Monsoon May 2025 vs Post-Monsoon Oct 2025 (Optimal Quality, Cloud < 5%)"
+            }
+        },
+        message="Satellite scenes availability retrieved"
+    )
+
+
+@router.post("/{waterbody_id}/change-detection")
+def compute_satellite_change_detection(
+    payload: ChangeDetectionRequest,
+    waterbody_id: str = Path(..., description="Unique waterbody identifier"),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Execute high-resolution Sentinel-2 NDWI change detection between two observation dates.
+    Calculates surface water spread, hectare change, percentage change, and classifies
+    shrinkage/expansion/stability.
+    """
+    wb = db.query(Waterbody).filter(Waterbody.id == waterbody_id).first()
+    if not wb:
+        return create_error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="NOT_FOUND",
+            message=f"Waterbody with ID '{waterbody_id}' not found"
+        )
+
+    # Validate date ordering
+    if payload.earlier_date >= payload.later_date:
+        return create_error_response(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_DATES",
+            message=f"Earlier date ({payload.earlier_date}) must be chronologically before later date ({payload.later_date})"
+        )
+
+    # Perform raster and NDWI calculations
+    try:
+        analysis_result = run_satellite_change_detection(
+            waterbody_id=wb.id,
+            waterbody_name=wb.name,
+            center_lat=wb.latitude,
+            center_lon=wb.longitude,
+            boundary_geojson_str=wb.boundary_geojson,
+            baseline_area_ha=wb.area_hectares,
+            earlier_date=payload.earlier_date,
+            later_date=payload.later_date,
+            ndwi_threshold=payload.ndwi_threshold,
+            tolerance_pct=payload.tolerance_pct,
+            min_change_ha=payload.min_change_ha,
+        )
+    except Exception as e:
+        return create_error_response(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            code="ANALYSIS_FAILED",
+            message=f"Satellite change detection computation error: {str(e)}"
+        )
+
+    # Persist in DB if requested
+    record_id = None
+    if payload.save_to_history:
+        record = WaterbodyChangeDetection(
+            waterbody_id=wb.id,
+            earlier_date=payload.earlier_date,
+            later_date=payload.later_date,
+            ndwi_threshold=payload.ndwi_threshold,
+            tolerance_pct=payload.tolerance_pct,
+            earlier_area_ha=analysis_result["earlier_area_ha"],
+            later_area_ha=analysis_result["later_area_ha"],
+            change_ha=analysis_result["change_ha"],
+            change_pct=analysis_result["change_pct"],
+            classification=analysis_result["classification"],
+            classification_reason=analysis_result["classification_reason"],
+            confidence_score=analysis_result["confidence_score"],
+            earlier_cloud_cover_pct=analysis_result["earlier_cloud_cover_pct"],
+            later_cloud_cover_pct=analysis_result["later_cloud_cover_pct"],
+            earlier_valid_coverage_pct=analysis_result["earlier_valid_coverage_pct"],
+            later_valid_coverage_pct=analysis_result["later_valid_coverage_pct"],
+            satellite_sensor=analysis_result["satellite_sensor"],
+            data_source=analysis_result["data_source"],
+            earlier_true_color_url=analysis_result["earlier_true_color_url"],
+            later_true_color_url=analysis_result["later_true_color_url"],
+            earlier_ndwi_mask_url=analysis_result["earlier_ndwi_mask_url"],
+            later_ndwi_mask_url=analysis_result["later_ndwi_mask_url"],
+            diff_map_url=analysis_result["diff_map_url"],
+            metadata_json=json.dumps(analysis_result["metadata"])
+        )
+        db.add(record)
+
+        # Optionally append to measurements timeline
+        if payload.record_measurement:
+            measurement_date = datetime.strptime(payload.later_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            meas = WaterbodyMeasurement(
+                waterbody_id=wb.id,
+                measurement_date=measurement_date,
+                water_spread_area_ha=analysis_result["later_area_ha"],
+                water_spread_percentage=round((analysis_result["later_area_ha"] / (wb.area_hectares or analysis_result["later_area_ha"])) * 100, 1) if wb.area_hectares else 100.0,
+                source=f"Sentinel-2 L2A NDWI (Threshold {payload.ndwi_threshold:+.2f})",
+                source_type="satellite",
+                notes=f"Change detection run: {analysis_result['classification'].capitalize()} ({analysis_result['change_ha']:+.2f} ha / {analysis_result['change_pct']:+.1f}%) compared to {payload.earlier_date}",
+                is_demo_data=False
+            )
+            db.add(meas)
+
+        db.commit()
+        db.refresh(record)
+        record_id = record.id
+
+    analysis_result["id"] = record_id
+    return create_success_response(
+        data=analysis_result,
+        message="Satellite change detection computed successfully"
+    )
+
+
+@router.get("/{waterbody_id}/change-detection/history")
+def get_change_detection_history(
+    waterbody_id: str = Path(..., description="Unique waterbody identifier"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve chronological history of previous satellite change detection runs for a waterbody.
+    """
+    wb = db.query(Waterbody).filter(Waterbody.id == waterbody_id).first()
+    if not wb:
+        return create_error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="NOT_FOUND",
+            message=f"Waterbody with ID '{waterbody_id}' not found"
+        )
+
+    records = db.query(WaterbodyChangeDetection).filter(
+        WaterbodyChangeDetection.waterbody_id == waterbody_id
+    ).order_by(desc(WaterbodyChangeDetection.created_at)).all()
+
+    items = []
+    for r in records:
+        items.append({
+            "id": r.id,
+            "waterbody_id": r.waterbody_id,
+            "earlier_date": r.earlier_date,
+            "later_date": r.later_date,
+            "ndwi_threshold": r.ndwi_threshold,
+            "tolerance_pct": r.tolerance_pct,
+            "earlier_area_ha": r.earlier_area_ha,
+            "later_area_ha": r.later_area_ha,
+            "change_ha": r.change_ha,
+            "change_pct": r.change_pct,
+            "classification": r.classification,
+            "classification_reason": r.classification_reason,
+            "confidence_score": r.confidence_score,
+            "earlier_cloud_cover_pct": r.earlier_cloud_cover_pct,
+            "later_cloud_cover_pct": r.later_cloud_cover_pct,
+            "earlier_valid_coverage_pct": r.earlier_valid_coverage_pct,
+            "later_valid_coverage_pct": r.later_valid_coverage_pct,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "diff_map_url": r.diff_map_url,
+        })
+
+    return create_success_response(
+        data={
+            "waterbody_id": wb.id,
+            "waterbody_name": wb.name,
+            "total_runs": len(items),
+            "history": items
+        },
+        message="Change detection history fetched successfully"
+    )
+
+
+@router.get("/{waterbody_id}/change-detection/{run_id}/export-csv")
+def export_change_detection_csv(
+    waterbody_id: str = Path(..., description="Unique waterbody identifier"),
+    run_id: str = Path(..., description="Change detection run ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Download a change detection analysis record as a formatted CSV document.
+    """
+    wb = db.query(Waterbody).filter(Waterbody.id == waterbody_id).first()
+    if not wb:
+        return create_error_response(status_code=404, code="NOT_FOUND", message="Waterbody not found")
+
+    record = db.query(WaterbodyChangeDetection).filter(
+        WaterbodyChangeDetection.id == run_id,
+        WaterbodyChangeDetection.waterbody_id == waterbody_id
+    ).first()
+
+    if not record:
+        return create_error_response(status_code=404, code="NOT_FOUND", message="Analysis record not found")
+
+    rec_dict = {
+        "waterbody_id": wb.id,
+        "waterbody_name": wb.name,
+        "earlier_date": record.earlier_date,
+        "later_date": record.later_date,
+        "ndwi_threshold": record.ndwi_threshold,
+        "tolerance_pct": record.tolerance_pct,
+        "earlier_area_ha": record.earlier_area_ha,
+        "later_area_ha": record.later_area_ha,
+        "change_ha": record.change_ha,
+        "change_pct": record.change_pct,
+        "classification": record.classification,
+        "classification_reason": record.classification_reason,
+        "confidence_score": record.confidence_score,
+        "earlier_cloud_cover_pct": record.earlier_cloud_cover_pct,
+        "later_cloud_cover_pct": record.later_cloud_cover_pct,
+        "earlier_valid_coverage_pct": record.earlier_valid_coverage_pct,
+        "later_valid_coverage_pct": record.later_valid_coverage_pct,
+        "satellite_sensor": record.satellite_sensor,
+        "data_source": record.data_source,
+    }
+
+    csv_content = generate_change_detection_csv(rec_dict)
+    filename = f"jalrakshak_change_{wb.id}_{record.earlier_date}_{record.later_date}.csv"
+
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get("/{waterbody_id}/change-detection/{run_id}/export-pdf")
+def export_change_detection_pdf(
+    waterbody_id: str = Path(..., description="Unique waterbody identifier"),
+    run_id: str = Path(..., description="Change detection run ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Download a change detection analysis record as a formal PDF report with map visuals.
+    """
+    wb = db.query(Waterbody).filter(Waterbody.id == waterbody_id).first()
+    if not wb:
+        return create_error_response(status_code=404, code="NOT_FOUND", message="Waterbody not found")
+
+    record = db.query(WaterbodyChangeDetection).filter(
+        WaterbodyChangeDetection.id == run_id,
+        WaterbodyChangeDetection.waterbody_id == waterbody_id
+    ).first()
+
+    if not record:
+        return create_error_response(status_code=404, code="NOT_FOUND", message="Analysis record not found")
+
+    rec_dict = {
+        "waterbody_id": wb.id,
+        "waterbody_name": wb.name,
+        "earlier_date": record.earlier_date,
+        "later_date": record.later_date,
+        "ndwi_threshold": record.ndwi_threshold,
+        "tolerance_pct": record.tolerance_pct,
+        "earlier_area_ha": record.earlier_area_ha,
+        "later_area_ha": record.later_area_ha,
+        "change_ha": record.change_ha,
+        "change_pct": record.change_pct,
+        "classification": record.classification,
+        "classification_reason": record.classification_reason,
+        "confidence_score": record.confidence_score,
+        "earlier_cloud_cover_pct": record.earlier_cloud_cover_pct,
+        "later_cloud_cover_pct": record.later_cloud_cover_pct,
+        "earlier_valid_coverage_pct": record.earlier_valid_coverage_pct,
+        "later_valid_coverage_pct": record.later_valid_coverage_pct,
+        "satellite_sensor": record.satellite_sensor,
+        "data_source": record.data_source,
+        "earlier_true_color_url": record.earlier_true_color_url,
+        "later_true_color_url": record.later_true_color_url,
+        "diff_map_url": record.diff_map_url,
+    }
+
+    try:
+        pdf_bytes = generate_change_detection_pdf_bytes(rec_dict)
+    except Exception as e:
+        return create_error_response(status_code=500, code="PDF_ERROR", message=f"Failed to generate PDF: {str(e)}")
+
+    filename = f"jalrakshak_satellite_report_{wb.id}_{record.earlier_date}_{record.later_date}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
