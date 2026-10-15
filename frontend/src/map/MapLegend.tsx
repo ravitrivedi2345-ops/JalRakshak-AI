@@ -4,17 +4,19 @@ import { Info, ChevronDown, ChevronUp } from "lucide-react";
 
 interface MapLegendProps {
   layers: MapLayerItem[];
+  className?: string;
+  defaultCollapsed?: boolean;
 }
 
-export function MapLegend({ layers }: MapLegendProps) {
-  const [collapsed, setCollapsed] = useState(false);
+export function MapLegend({ layers, className = "", defaultCollapsed = true }: MapLegendProps) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   const visibleLayers = layers.filter((l) => l.visible);
 
   if (visibleLayers.length === 0) return null;
 
   return (
-    <div className="absolute bottom-6 left-4 z-20 max-w-xs transition-all">
+    <div className={`max-w-xs transition-all pointer-events-auto ${className}`}>
       <div className="bg-slate-900/90 border border-slate-800 rounded-xl shadow-2xl backdrop-blur-md overflow-hidden text-slate-200">
         <button
           type="button"

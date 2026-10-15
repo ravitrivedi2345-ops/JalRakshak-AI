@@ -18,11 +18,11 @@ interface MapCanvasProps {
   mapInstanceRef?: React.MutableRefObject<MapLibreMap | null>;
 }
 
-// Tile endpoints for basemaps
+// Tile endpoints for basemaps (High-resolution, free public GIS basemaps with NO watermark)
 const BASEMAP_TILES: Record<BasemapStyle, { url: string; attribution: string; maxzoom: number }> = {
   streets: {
-    url: "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-    attribution: "&copy; OpenStreetMap &copy; CARTO",
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    attribution: "&copy; Esri, HERE, Garmin, USGS, NGA",
     maxzoom: 19
   },
   satellite: {
@@ -31,14 +31,14 @@ const BASEMAP_TILES: Record<BasemapStyle, { url: string; attribution: string; ma
     maxzoom: 19
   },
   topo: {
-    url: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
-    attribution: "&copy; OpenStreetMap contributors, SRTM | &copy; OpenTopoMap",
-    maxzoom: 17
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+    attribution: "&copy; Esri, FAO, NOAA, USGS",
+    maxzoom: 18
   },
   dark: {
-    url: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-    attribution: "&copy; OpenStreetMap &copy; CARTO",
-    maxzoom: 19
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    attribution: "&copy; Esri, HERE, DeLorme, MapmyIndia",
+    maxzoom: 18
   }
 };
 

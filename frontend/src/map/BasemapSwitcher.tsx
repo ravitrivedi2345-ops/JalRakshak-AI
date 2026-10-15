@@ -9,10 +9,10 @@ interface BasemapSwitcherProps {
 }
 
 const BASEMAP_OPTIONS: { id: BasemapStyle; label: string; icon: typeof Map; desc: string }[] = [
-  { id: "streets", label: "Streets", icon: Map, desc: "Carto Voyager / OSM Vector" },
-  { id: "satellite", label: "Satellite", icon: Globe, desc: "Esri / Sentinel-2 Surface" },
-  { id: "topo", label: "Terrain", icon: Mountain, desc: "OpenTopoMap Contours" },
-  { id: "dark", label: "Dark", icon: Moon, desc: "Carto Dark Matter" }
+  { id: "streets", label: "Streets", icon: Map, desc: "Esri World Street Map (No key required)" },
+  { id: "satellite", label: "Satellite", icon: Globe, desc: "Esri High-Resolution World Imagery" },
+  { id: "topo", label: "Terrain", icon: Mountain, desc: "Esri World Topographic Map" },
+  { id: "dark", label: "Dark", icon: Moon, desc: "Esri World Dark Gray Canvas" }
 ];
 
 export function BasemapSwitcher({ currentBasemap, activeBasemap, onChangeBasemap }: BasemapSwitcherProps) {

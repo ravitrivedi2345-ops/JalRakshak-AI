@@ -382,13 +382,17 @@ export const MapExplorer: React.FC<MapExplorerProps> = ({
           />
         </div>
 
-        {/* Bottom-Left: Basemap Switcher & Legend */}
-        <div className="absolute bottom-6 left-4 z-10 flex flex-col gap-3 pointer-events-auto">
+        {/* Bottom Center: Floating Basemap Switcher */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-auto">
           <BasemapSwitcher
             activeBasemap={activeBasemap}
             onChangeBasemap={setActiveBasemap}
           />
-          <MapLegend layers={layers} />
+        </div>
+
+        {/* Bottom Right: Collapsible Map Legend */}
+        <div className="absolute bottom-6 right-4 z-10 pointer-events-auto">
+          <MapLegend layers={layers} defaultCollapsed={true} />
         </div>
 
         {/* Right Side: Map Action Toolbar */}

@@ -101,7 +101,7 @@ export function LayerControl({
 
       {/* Expanded Layer Panel */}
       {isOpen && (
-        <div className="bg-slate-950/95 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-md flex flex-col max-h-[85vh] overflow-hidden text-slate-100">
+        <div className="bg-slate-950/95 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-md flex flex-col max-h-[calc(100vh-14rem)] min-h-[220px] overflow-hidden text-slate-100">
           {/* Header */}
           <div className="flex items-center justify-between p-3.5 border-b border-slate-800/80 bg-slate-900/80">
             <div className="flex items-center gap-2">
