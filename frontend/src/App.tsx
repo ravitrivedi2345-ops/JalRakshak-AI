@@ -97,6 +97,13 @@ const DemoIndexChart = lazy(() => import("./DemoIndexChart"));
 const WaterbodyExplorer = lazy(() => import("./WaterbodyExplorer"));
 const SatelliteChangeDetection = lazy(() => import("./SatelliteChangeDetection"));
 const MapExplorer = lazy(() => import("./map/MapExplorer"));
+import {
+  fetchAdministrativeBoundaries,
+  fetchWatershedBoundaries,
+  fetchHydrology,
+  fetchInterventions as fetchGisInterventions,
+  searchMapFeatures,
+} from "./map/mapApi";
 
 type Site = {
   id: string;
@@ -746,6 +753,7 @@ function MapPanel({
   onSelectSite,
   uploadedCoordinates,
   selectedWatershedId,
+  gisLayers,
 }: {
   layer: string;
   selectedSite: string;
@@ -754,9 +762,11 @@ function MapPanel({
   onSelectSite: (id: string) => void;
   uploadedCoordinates: [number, number] | null;
   selectedWatershedId?: string;
+  gisLayers?: LayerItemDef[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const popupRef = useRef<any>(null);
   const markerElements = useRef(new Map<string, HTMLButtonElement>());
   const markerInstances = useRef<MapLibreMarker[]>([]);
   const uploadMarkerRef = useRef<MapLibreMarker | null>(null);
@@ -768,6 +778,42 @@ function MapPanel({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mouseCoords, setMouseCoords] = useState<{ lat: number; lng: number; zoom: number }>({ lat: 22.0, lng: 82.0, zoom: 3.8 });
 
+  // Geographic search in map panel
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Geospatial datasets loaded from FastAPI backend
+  const [gisData, setGisData] = useState<{
+    admin: any;
+    watersheds: any;
+    hydrology: any;
+    interventions: any;
+  } | null>(null);
+
+  // Fetch verified GIS datasets from backend
+  useEffect(() => {
+    let active = true;
+    Promise.allSettled([
+      fetchAdministrativeBoundaries("all"),
+      fetchWatershedBoundaries(),
+      fetchHydrology("all"),
+      fetchGisInterventions(),
+    ]).then(([adminRes, wsRes, hydroRes, intervRes]) => {
+      if (!active) return;
+      setGisData({
+        admin: adminRes.status === "fulfilled" ? adminRes.value : null,
+        watersheds: wsRes.status === "fulfilled" ? wsRes.value : null,
+        hydrology: hydroRes.status === "fulfilled" ? hydroRes.value : null,
+        interventions: intervRes.status === "fulfilled" ? intervRes.value : null,
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const layerRef = useRef(layer);
   layerRef.current = layer;
   const attentionOnlyRef = useRef(attentionOnly);
@@ -776,12 +822,6 @@ function MapPanel({
   visibleSiteIdsRef.current = visibleSiteIds;
   const activeMapSite = sites.find((site) => site.id === selectedSite) ?? sites[0];
 
-  const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
-  const mapboxSatelliteTile = mapboxToken ? `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}` : null;
-  const mapboxStreetsTile = mapboxToken ? `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}` : null;
-  const mapboxOutdoorsTile = mapboxToken ? `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}` : null;
-  const mapboxDarkTile = mapboxToken ? `https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}?access_token=${mapboxToken}` : null;
-
   useEffect(() => {
     if (!containerRef.current) return;
     let cancelled = false;
@@ -789,11 +829,11 @@ function MapPanel({
 
     const initializeMap = async () => {
       try {
-        const { Map, Marker, NavigationControl, AttributionControl, setWorkerUrl } = await import("maplibre-gl");
+        const { Map, Marker, NavigationControl, AttributionControl, Popup, setWorkerUrl } = await import("maplibre-gl");
         if (cancelled || !containerRef.current) return;
         setWorkerUrl(maplibreWorkerUrl);
 
-        const customMapStyle = import.meta.env.VITE_MAP_STYLE_URL || (import.meta.env.VITE_MAPTILER_KEY ? `https://api.maptiler.com/maps/streets-v2/style.json?key=${import.meta.env.VITE_MAPTILER_KEY}` : null);
+        popupRef.current = new Popup({ closeButton: false, closeOnClick: false, offset: 12 });
 
         const map = new Map({
           container: containerRef.current,
@@ -801,48 +841,49 @@ function MapPanel({
           zoom: 3.8,
           pitch: pitch,
           minZoom: 3,
-          maxZoom: 17,
+          maxZoom: 18,
           attributionControl: false,
-          style: customMapStyle || {
+          style: {
             version: 8,
             sources: {
               osm: {
                 type: "raster",
-                tiles: mapboxStreetsTile ? [mapboxStreetsTile] : [
-                  "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-                  "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-                  "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-                  "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                tiles: [
+                  "https://services.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
                 ],
                 tileSize: 256,
-                attribution: mapboxStreetsTile ? '© <a href="https://www.mapbox.com/">Mapbox</a> contributors' : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> &copy; CARTO',
+                attribution: "&copy; Esri, HERE, Garmin, USGS, NGA",
               },
               satellite: {
                 type: "raster",
-                tiles: mapboxSatelliteTile ? [mapboxSatelliteTile] : [
+                tiles: [
                   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                 ],
                 tileSize: 256,
-                attribution: mapboxSatelliteTile ? "Imagery &copy; Mapbox, Maxar, Sentinel-2" : "Imagery &copy; Esri, Maxar, Earthstar Geographics",
+                attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics",
               },
               topo: {
                 type: "raster",
-                tiles: mapboxOutdoorsTile ? [mapboxOutdoorsTile] : ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
+                tiles: [
+                  "https://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+                ],
                 tileSize: 256,
-                attribution: mapboxOutdoorsTile ? "© Mapbox Outdoors © OpenStreetMap" : "&copy; OpenTopoMap contributors",
+                attribution: "&copy; Esri, FAO, NOAA, USGS",
               },
               dark: {
                 type: "raster",
-                tiles: mapboxDarkTile ? [mapboxDarkTile] : ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
+                tiles: [
+                  "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+                ],
                 tileSize: 256,
-                attribution: mapboxDarkTile ? "© Mapbox Dark © OpenStreetMap" : "&copy; CARTO &copy; OpenStreetMap",
+                attribution: "&copy; Esri, HERE, DeLorme, MapmyIndia",
               }
             },
             layers: [
               { id: "osm-raster", type: "raster", source: "osm", minzoom: 0, maxzoom: 19 },
               { id: "satellite-raster", type: "raster", source: "satellite", minzoom: 0, maxzoom: 19, layout: { visibility: "none" } },
-              { id: "topo-raster", type: "raster", source: "topo", minzoom: 0, maxzoom: 17, layout: { visibility: "none" } },
-              { id: "dark-raster", type: "raster", source: "dark", minzoom: 0, maxzoom: 19, layout: { visibility: "none" } },
+              { id: "topo-raster", type: "raster", source: "topo", minzoom: 0, maxzoom: 18, layout: { visibility: "none" } },
+              { id: "dark-raster", type: "raster", source: "dark", minzoom: 0, maxzoom: 18, layout: { visibility: "none" } },
             ],
           },
         });
@@ -878,45 +919,8 @@ function MapPanel({
           setMapStatus("ready");
           try {
             map.resize();
-            if (map.isStyleLoaded() && !map.getSource("watershed-boundary")) {
-              map.addSource("watershed-boundary", {
-                type: "geojson",
-                data: {
-                  type: "Feature",
-                  properties: {},
-                  geometry: {
-                    type: "Polygon",
-                    coordinates: [[
-                      [68.1, 23.2], [69.5, 22.8], [70.1, 20.5], [72.4, 19.1],
-                      [73.4, 15.2], [74.7, 11.9], [77.1, 8.1], [79.5, 9.1],
-                      [80.2, 13.1], [82.2, 15.1], [84.5, 17.7], [86.8, 20.1],
-                      [88.2, 22.1], [89.7, 23.8], [92.2, 24.1], [94.8, 26.1],
-                      [96.1, 28.2], [94.2, 29.1], [92.3, 27.2], [90.1, 27.2],
-                      [88.1, 27.7], [85.9, 28.2], [83.3, 29.8], [81.4, 31.4],
-                      [79.2, 34.1], [76.4, 35.3], [74.2, 33.5], [73.1, 30.4],
-                      [71.3, 28.8], [70.2, 26.9], [68.1, 25], [68.1, 23.2],
-                    ]],
-                  },
-                },
-              });
-              map.addLayer({
-                id: "watershed-fill",
-                type: "fill",
-                source: "watershed-boundary",
-                paint: {
-                  "fill-color": layerRef.current === "NDVI health" ? "#53a967" : layerRef.current === "NDWI water" ? "#39a5c2" : "#48a879",
-                  "fill-opacity": layerRef.current === "Interventions" ? 0.13 : 0.3,
-                },
-              });
-              map.addLayer({
-                id: "watershed-line",
-                type: "line",
-                source: "watershed-boundary",
-                paint: { "line-color": "#23835f", "line-width": 2, "line-dasharray": [2, 1.5] },
-              });
-            }
           } catch (e) {
-            console.warn("Boundary layer add notice:", e);
+            console.warn("Map resize notice:", e);
           }
         };
 
@@ -978,6 +982,429 @@ function MapPanel({
     if (map.isStyleLoaded()) updateBasemap();
     else map.once("style.load", updateBasemap);
   }, [basemap]);
+
+  // Setup vector sources and GIS layers from backend
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !gisData) return;
+
+    const setupLayers = () => {
+      if (!map.isStyleLoaded()) return;
+
+      const setSource = (id: string, data: any, cluster: boolean = false) => {
+        const existing = map.getSource(id) as any;
+        const valid = data && data.features ? data : { type: "FeatureCollection", features: [] };
+        if (existing) {
+          existing.setData(valid);
+        } else {
+          map.addSource(id, {
+            type: "geojson",
+            data: valid,
+            cluster,
+            clusterMaxZoom: 12,
+            clusterRadius: 40,
+          });
+        }
+      };
+
+      const nationalFeatures = {
+        type: "FeatureCollection",
+        features: (gisData.admin?.features || []).filter(
+          (f: any) => f.properties?.boundary_type === "national" || f.id === "ind-national"
+        ),
+      };
+      const stateFeatures = {
+        type: "FeatureCollection",
+        features: (gisData.admin?.features || []).filter(
+          (f: any) => f.properties?.boundary_type === "state" || f.properties?.type === "state"
+        ),
+      };
+      const districtFeatures = {
+        type: "FeatureCollection",
+        features: (gisData.admin?.features || []).filter(
+          (f: any) => f.properties?.boundary_type === "district" || f.properties?.type === "district"
+        ),
+      };
+      const rivers = {
+        type: "FeatureCollection",
+        features: (gisData.hydrology?.features || []).filter(
+          (f: any) => f.properties?.type === "river" || f.properties?.hydrology_type === "river"
+        ),
+      };
+      const drainage = {
+        type: "FeatureCollection",
+        features: (gisData.hydrology?.features || []).filter(
+          (f: any) => f.properties?.type === "drainage" || f.properties?.hydrology_type === "drainage"
+        ),
+      };
+      const waterbodies = {
+        type: "FeatureCollection",
+        features: (gisData.hydrology?.features || []).filter(
+          (f: any) =>
+            f.properties?.type === "waterbody" ||
+            f.properties?.type === "lake" ||
+            f.properties?.type === "pond" ||
+            f.properties?.type === "reservoir" ||
+            f.properties?.hydrology_type === "waterbody"
+        ),
+      };
+      const points = {
+        type: "FeatureCollection",
+        features: (gisData.interventions?.features || []).filter((f: any) => f.geometry?.type === "Point"),
+      };
+      const lines = {
+        type: "FeatureCollection",
+        features: (gisData.interventions?.features || []).filter(
+          (f: any) => f.geometry?.type === "LineString" || f.geometry?.type === "MultiLineString"
+        ),
+      };
+
+      setSource("src-admin-national", nationalFeatures);
+      setSource("src-admin-states", stateFeatures);
+      setSource("src-admin-districts", districtFeatures);
+      setSource("src-watersheds", gisData.watersheds);
+      setSource("src-rivers", rivers);
+      setSource("src-drainage", drainage);
+      setSource("src-waterbodies", waterbodies);
+      setSource("src-interventions-points", points, true);
+      setSource("src-interventions-lines", lines, false);
+
+      if (!map.getLayer("layer-admin-national")) {
+        map.addLayer({
+          id: "layer-admin-national",
+          type: "line",
+          source: "src-admin-national",
+          paint: { "line-color": "#1e3a8a", "line-width": 2.5, "line-opacity": 0.8 },
+        });
+      }
+      if (!map.getLayer("layer-watersheds-fill")) {
+        map.addLayer({
+          id: "layer-watersheds-fill",
+          type: "fill",
+          source: "src-watersheds",
+          paint: { "fill-color": "#23835f", "fill-opacity": 0.25 },
+        });
+      }
+      if (!map.getLayer("layer-watersheds-line")) {
+        map.addLayer({
+          id: "layer-watersheds-line",
+          type: "line",
+          source: "src-watersheds",
+          paint: { "line-color": "#15803d", "line-width": 1.8, "line-dasharray": [3, 2], "line-opacity": 0.8 },
+        });
+      }
+      if (!map.getLayer("layer-admin-states-fill")) {
+        map.addLayer({
+          id: "layer-admin-states-fill",
+          type: "fill",
+          source: "src-admin-states",
+          paint: { "fill-color": "#475569", "fill-opacity": 0.2 },
+        });
+      }
+      if (!map.getLayer("layer-admin-states-line")) {
+        map.addLayer({
+          id: "layer-admin-states-line",
+          type: "line",
+          source: "src-admin-states",
+          paint: { "line-color": "#64748b", "line-width": 1.4, "line-opacity": 0.6 },
+        });
+      }
+      if (!map.getLayer("layer-admin-districts-fill")) {
+        map.addLayer({
+          id: "layer-admin-districts-fill",
+          type: "fill",
+          source: "src-admin-districts",
+          paint: { "fill-color": "#64748b", "fill-opacity": 0.15 },
+        });
+      }
+      if (!map.getLayer("layer-admin-districts-line")) {
+        map.addLayer({
+          id: "layer-admin-districts-line",
+          type: "line",
+          source: "src-admin-districts",
+          paint: { "line-color": "#94a3b8", "line-width": 1.0, "line-dasharray": [2, 1], "line-opacity": 0.5 },
+        });
+      }
+      if (!map.getLayer("layer-drainage")) {
+        map.addLayer({
+          id: "layer-drainage",
+          type: "line",
+          source: "src-drainage",
+          paint: { "line-color": "#38bdf8", "line-width": 1.5, "line-dasharray": [2, 2], "line-opacity": 0.7 },
+        });
+      }
+      if (!map.getLayer("layer-rivers")) {
+        map.addLayer({
+          id: "layer-rivers",
+          type: "line",
+          source: "src-rivers",
+          paint: { "line-color": "#0284c7", "line-width": 3.0, "line-opacity": 0.85 },
+        });
+      }
+      if (!map.getLayer("layer-waterbodies-fill")) {
+        map.addLayer({
+          id: "layer-waterbodies-fill",
+          type: "fill",
+          source: "src-waterbodies",
+          paint: { "fill-color": "#0284c7", "fill-opacity": 0.6 },
+        });
+      }
+      if (!map.getLayer("layer-waterbodies-line")) {
+        map.addLayer({
+          id: "layer-waterbodies-line",
+          type: "line",
+          source: "src-waterbodies",
+          paint: { "line-color": "#38bdf8", "line-width": 1.6, "line-opacity": 0.8 },
+        });
+      }
+      if (!map.getLayer("layer-interventions-lines")) {
+        map.addLayer({
+          id: "layer-interventions-lines",
+          type: "line",
+          source: "src-interventions-lines",
+          paint: { "line-color": "#ec4899", "line-width": 2.2, "line-opacity": 0.8 },
+        });
+      }
+      if (!map.getLayer("layer-interventions-clusters")) {
+        map.addLayer({
+          id: "layer-interventions-clusters",
+          type: "circle",
+          source: "src-interventions-points",
+          filter: ["has", "point_count"],
+          paint: {
+            "circle-color": ["step", ["get", "point_count"], "#10b981", 5, "#f59e0b", 15, "#ec4899"],
+            "circle-radius": ["step", ["get", "point_count"], 14, 5, 18, 15, 24],
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+            "circle-opacity": 0.9,
+          },
+        });
+      }
+      if (!map.getLayer("layer-interventions-count")) {
+        map.addLayer({
+          id: "layer-interventions-count",
+          type: "symbol",
+          source: "src-interventions-points",
+          filter: ["has", "point_count"],
+          layout: {
+            "text-field": "{point_count_abbreviated}",
+            "text-size": 11,
+            "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+          },
+          paint: { "text-color": "#ffffff" },
+        });
+      }
+      if (!map.getLayer("layer-interventions-unclustered")) {
+        map.addLayer({
+          id: "layer-interventions-unclustered",
+          type: "circle",
+          source: "src-interventions-points",
+          filter: ["!", ["has", "point_count"]],
+          paint: {
+            "circle-color": [
+              "match",
+              ["get", "structure_type"],
+              "check_dam", "#059669",
+              "farm_pond", "#0284c7",
+              "percolation_tank", "#d97706",
+              "#06b6d4"
+            ],
+            "circle-radius": 6.5,
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+            "circle-opacity": 0.95,
+          },
+        });
+      }
+
+      // Cluster click zoom
+      const onClusterClick = (e: any) => {
+        const features = map.queryRenderedFeatures(e.point, { layers: ["layer-interventions-clusters"] });
+        const clusterId = features[0]?.properties?.cluster_id;
+        const source = map.getSource("src-interventions-points") as any;
+        if (source && clusterId !== undefined) {
+          source.getClusterExpansionZoom(clusterId, (err: any, z: number) => {
+            if (err) return;
+            map.easeTo({ center: (features[0].geometry as any).coordinates, zoom: z + 0.5 });
+          });
+        }
+      };
+      map.off("click", "layer-interventions-clusters", onClusterClick);
+      map.on("click", "layer-interventions-clusters", onClusterClick);
+
+      // Feature hover & click
+      const interactiveLayerIds = [
+        "layer-interventions-unclustered",
+        "layer-interventions-lines",
+        "layer-waterbodies-fill",
+        "layer-rivers",
+        "layer-watersheds-fill",
+        "layer-admin-districts-fill",
+        "layer-admin-states-fill",
+      ];
+
+      const onFeatureClick = (e: any) => {
+        const feats = map.queryRenderedFeatures(e.point, { layers: interactiveLayerIds });
+        if (!feats.length) return;
+        const f = feats[0];
+        const p = f.properties || {};
+        const title = p.name || p.river_name || p.structure_name || "GIS Feature";
+        const matched = sites.find((s) => s.id === p.id || s.name.toLowerCase() === title.toLowerCase());
+        if (matched) {
+          onSelectSite(matched.id);
+        }
+      };
+
+      const onFeatureHover = (e: any) => {
+        const feats = map.queryRenderedFeatures(e.point, { layers: interactiveLayerIds });
+        if (feats.length) {
+          map.getCanvas().style.cursor = "pointer";
+          const f = feats[0];
+          const p = f.properties || {};
+          const title = p.name || p.river_name || p.structure_name || "GIS Feature";
+          const subtitle = p.structure_type || p.type || p.boundary_type || "";
+          if (popupRef.current) {
+            popupRef.current
+              .setLngLat(e.lngLat)
+              .setHTML(`<div style="padding:4px 8px;font-size:12px;font-weight:600;color:#1e293b;">${title}<div style="font-size:10px;font-weight:400;color:#64748b;text-transform:capitalize;">${subtitle.replace(/_/g, " ")}</div></div>`)
+              .addTo(map);
+          }
+        } else {
+          map.getCanvas().style.cursor = "";
+          if (popupRef.current) popupRef.current.remove();
+        }
+      };
+
+      interactiveLayerIds.forEach((lid) => {
+        map.off("click", lid, onFeatureClick);
+        map.on("click", lid, onFeatureClick);
+      });
+      map.on("mousemove", onFeatureHover);
+    };
+
+    if (map.isStyleLoaded()) {
+      setupLayers();
+    } else {
+      map.once("style.load", setupLayers);
+    }
+  }, [gisData, onSelectSite]);
+
+  // Synchronize layer visibility & opacity with LayerExplorerCard (gisLayers)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded() || !gisLayers) return;
+
+    gisLayers.forEach((l) => {
+      const isVisible = l.defaultVisible;
+      const opacity = l.defaultOpacity;
+
+      if (l.id === "boundary-india" && map.getLayer("layer-admin-national")) {
+        map.setLayoutProperty("layer-admin-national", "visibility", isVisible ? "visible" : "none");
+        map.setPaintProperty("layer-admin-national", "line-opacity", opacity);
+      }
+      if (l.id === "boundary-state") {
+        if (map.getLayer("layer-admin-states-fill")) {
+          map.setLayoutProperty("layer-admin-states-fill", "visibility", isVisible ? "visible" : "none");
+          map.setPaintProperty("layer-admin-states-fill", "fill-opacity", opacity * 0.35);
+        }
+        if (map.getLayer("layer-admin-states-line")) {
+          map.setLayoutProperty("layer-admin-states-line", "visibility", isVisible ? "visible" : "none");
+          map.setPaintProperty("layer-admin-states-line", "line-opacity", opacity);
+        }
+      }
+      if (l.id === "boundary-district") {
+        if (map.getLayer("layer-admin-districts-fill")) {
+          map.setLayoutProperty("layer-admin-districts-fill", "visibility", isVisible ? "visible" : "none");
+          map.setPaintProperty("layer-admin-districts-fill", "fill-opacity", opacity * 0.3);
+        }
+        if (map.getLayer("layer-admin-districts-line")) {
+          map.setLayoutProperty("layer-admin-districts-line", "visibility", isVisible ? "visible" : "none");
+          map.setPaintProperty("layer-admin-districts-line", "line-opacity", opacity);
+        }
+      }
+      if (l.id === "boundary-watershed" || l.id === "boundary-subwatershed") {
+        if (map.getLayer("layer-watersheds-fill")) {
+          map.setLayoutProperty("layer-watersheds-fill", "visibility", isVisible ? "visible" : "none");
+          map.setPaintProperty("layer-watersheds-fill", "fill-opacity", opacity * 0.3);
+        }
+        if (map.getLayer("layer-watersheds-line")) {
+          map.setLayoutProperty("layer-watersheds-line", "visibility", isVisible ? "visible" : "none");
+          map.setPaintProperty("layer-watersheds-line", "line-opacity", opacity);
+        }
+      }
+      if (l.id === "hydro-streams") {
+        if (map.getLayer("layer-rivers")) {
+          map.setLayoutProperty("layer-rivers", "visibility", isVisible ? "visible" : "none");
+          map.setPaintProperty("layer-rivers", "line-opacity", opacity);
+        }
+        if (map.getLayer("layer-drainage")) {
+          map.setLayoutProperty("layer-drainage", "visibility", isVisible ? "visible" : "none");
+          map.setPaintProperty("layer-drainage", "line-opacity", opacity);
+        }
+      }
+      if (l.id === "hydro-waterbodies") {
+        if (map.getLayer("layer-waterbodies-fill")) {
+          map.setLayoutProperty("layer-waterbodies-fill", "visibility", isVisible ? "visible" : "none");
+          map.setPaintProperty("layer-waterbodies-fill", "fill-opacity", opacity * 0.7);
+        }
+        if (map.getLayer("layer-waterbodies-line")) {
+          map.setLayoutProperty("layer-waterbodies-line", "visibility", isVisible ? "visible" : "none");
+          map.setPaintProperty("layer-waterbodies-line", "line-opacity", opacity);
+        }
+      }
+      if (l.id === "interventions-checkdams" || l.id === "interventions-farmponds" || l.id === "interventions-recharge") {
+        const hasAnyIntervention = gisLayers.some(
+          (gl) => (gl.id === "interventions-checkdams" || gl.id === "interventions-farmponds" || gl.id === "interventions-recharge") && gl.defaultVisible
+        );
+        if (map.getLayer("layer-interventions-clusters")) {
+          map.setLayoutProperty("layer-interventions-clusters", "visibility", hasAnyIntervention ? "visible" : "none");
+        }
+        if (map.getLayer("layer-interventions-count")) {
+          map.setLayoutProperty("layer-interventions-count", "visibility", hasAnyIntervention ? "visible" : "none");
+        }
+        if (map.getLayer("layer-interventions-unclustered")) {
+          map.setLayoutProperty("layer-interventions-unclustered", "visibility", hasAnyIntervention ? "visible" : "none");
+        }
+      }
+    });
+  }, [gisLayers]);
+
+  // Search input handler
+  const handleSearchInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const q = e.target.value;
+    setSearchQuery(q);
+    if (!q.trim()) {
+      setSearchResults([]);
+      setSearchOpen(false);
+      return;
+    }
+    setIsSearching(true);
+    setSearchOpen(true);
+    try {
+      const results = await searchMapFeatures(q, 6);
+      setSearchResults(results);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSelectSearchResult = (result: any) => {
+    setSearchOpen(false);
+    setSearchQuery(result.title);
+    if (mapRef.current) {
+      if (result.bounds) {
+        mapRef.current.fitBounds(result.bounds, { padding: 40, duration: 900 });
+      } else if (result.center) {
+        mapRef.current.flyTo({ center: result.center, zoom: result.zoom || 11, duration: 900 });
+      }
+    }
+    const matchedSite = sites.find((s) => s.id === result.id || s.name.toLowerCase().includes(result.title.toLowerCase()));
+    if (matchedSite) {
+      onSelectSite(matchedSite.id);
+    }
+  };
 
   const handleTogglePitch = () => {
     const newPitch = pitch === 0 ? 45 : 0;
@@ -1118,8 +1545,9 @@ function MapPanel({
 
   return (
     <div className={`map-frame map-canvas-container ${isFullscreen ? "map-fullscreen-active" : ""}`}>
-      <div className="map-top-bar">
-        <div className="map-control-group">
+      <div className="map-top-bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+        {/* Basemap Selection */}
+        <div className="map-control-group" style={{ flexShrink: 0 }}>
           <Layers3 size={15} style={{ color: "#28764e" }} />
           <select
             className="filter-select"
@@ -1128,13 +1556,58 @@ function MapPanel({
             onChange={(e) => setBasemap(e.target.value as "osm" | "satellite" | "topo" | "dark")}
             aria-label="Select Map Basemap"
           >
-            <option value="satellite">Satellite Imagery ({mapboxToken ? "Mapbox HD" : "Esri"})</option>
-            <option value="osm">Street Map ({mapboxToken ? "Mapbox Streets" : "Carto"})</option>
-            <option value="topo">Topographic ({mapboxToken ? "Mapbox Outdoors" : "OpenTopo"})</option>
-            <option value="dark">GIS Dark Mode (Carto)</option>
+            <option value="osm">Street Map (Esri World Streets)</option>
+            <option value="satellite">Satellite Imagery (Esri HD)</option>
+            <option value="topo">Topographic (Esri World Topo)</option>
+            <option value="dark">GIS Dark Canvas (Esri)</option>
           </select>
         </div>
-        <div className="map-control-group">
+
+        {/* Integrated Geographic Search */}
+        <div className="map-control-group" style={{ position: "relative", minWidth: "180px", maxWidth: "300px", flex: 1, margin: "0 6px" }}>
+          <div style={{ display: "flex", alignItems: "center", width: "100%", background: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(4px)", borderRadius: "6px", border: "1px solid #dce6dc", padding: "2px 8px" }}>
+            <Search size={13} style={{ color: "#64748b", marginRight: "6px", flexShrink: 0 }} />
+            <input
+              type="text"
+              placeholder="Search state, district, watershed, coords…"
+              value={searchQuery}
+              onChange={handleSearchInput}
+              style={{ width: "100%", fontSize: "11.5px", border: 0, background: "transparent", outline: "none", color: "#1e293b" }}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => { setSearchQuery(""); setSearchOpen(false); }}
+                style={{ border: 0, background: "transparent", cursor: "pointer", padding: "0 2px", color: "#94a3b8" }}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          {searchOpen && searchResults.length > 0 && (
+            <div style={{ position: "absolute", top: "34px", left: 0, right: 0, background: "#ffffff", borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,0.18)", border: "1px solid #e2e8f0", zIndex: 50, overflow: "hidden", maxHeight: "220px", overflowY: "auto" }}>
+              {searchResults.map((r) => (
+                <div
+                  key={r.id}
+                  onClick={() => handleSelectSearchResult(r)}
+                  style={{ padding: "6px 10px", borderBottom: "1px solid #f1f5f9", cursor: "pointer", display: "flex", flexDirection: "column" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f8fafc")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#ffffff")}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 600, color: "#1e293b" }}>{r.title}</span>
+                    <span style={{ fontSize: "9px", textTransform: "uppercase", background: "#ecfdf5", color: "#059669", padding: "1px 5px", borderRadius: "4px" }}>{r.category}</span>
+                  </div>
+                  <span style={{ fontSize: "10.5px", color: "#64748b" }}>{r.subtitle}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Map Control Actions */}
+        <div className="map-control-group" style={{ flexShrink: 0 }}>
           <button className="map-btn-sm" onClick={handleFitWatershed} title="Fit Map to Selected Watershed">
             <Compass size={14} /> Fit Watershed
           </button>
@@ -2377,29 +2850,6 @@ function App() {
     );
   }
 
-  if (tourStepIndex === null && active === "Map explorer") {
-    return (
-      <Suspense
-        fallback={
-          <div className="flex h-screen w-full items-center justify-center bg-slate-950 text-emerald-400 font-sans">
-            <Waves className="animate-spin mr-3 text-emerald-400" size={32} />
-            <span className="text-sm font-semibold tracking-wide text-slate-200">
-              Loading Interactive Watershed Map Explorer...
-            </span>
-          </div>
-        }
-      >
-        <MapExplorer
-          onBackToDashboard={() => handleNavigate("Overview", "top")}
-          onLaunchSatelliteChange={(wbId) => {
-            setSelectedSatelliteWaterbodyId(wbId);
-            handleNavigate("Satellite Change", "satellite-change");
-          }}
-        />
-      </Suspense>
-    );
-  }
-
   return (
     <div className={`app-shell min-h-screen bg-[#f4f7f3] ${collapsed ? "nav-is-collapsed" : ""} ${printReport ? "report-print-mode" : ""}`} id="top">
       <Sidebar
@@ -2691,10 +3141,19 @@ function App() {
                       fontWeight: 600,
                       cursor: "pointer"
                     }}
-                    onClick={() => handleNavigate("Map explorer", "top")}
-                    title="Open Fullscreen Interactive Watershed GIS Map Explorer"
+                    onClick={() => {
+                      const mapFrame = document.querySelector(".map-frame");
+                      if (mapFrame) {
+                        if (!document.fullscreenElement) {
+                          mapFrame.requestFullscreen().catch(() => {});
+                        } else {
+                          document.exitFullscreen().catch(() => {});
+                        }
+                      }
+                    }}
+                    title="Toggle Map Fullscreen Workspace on Dashboard"
                   >
-                    <MapIcon size={15} /> GIS Map Explorer
+                    <Maximize size={15} /> Expand GIS Workspace
                   </button>
                   <button
                     className="report-button"
@@ -2742,6 +3201,7 @@ function App() {
                   uploadedCoordinates={uploadCoordinates ?? analysisCoordinates}
                   onSelectSite={onSelectSite}
                   selectedWatershedId={selectedWatershedFilter}
+                  gisLayers={gisLayers}
                 />
               </div>
 
