@@ -93,6 +93,7 @@ import {
 
 type Icon = ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
 const DemoIndexChart = lazy(() => import("./DemoIndexChart"));
+const WaterbodyExplorer = lazy(() => import("./WaterbodyExplorer"));
 
 type Site = {
   id: string;
@@ -133,6 +134,7 @@ type DemoVerificationTask = {
 
 const navItems: { label: string; icon: Icon; id: string; count?: number }[] = [
   { label: "Overview", icon: LayoutDashboard, id: "top" },
+  { label: "Waterbody Explorer", icon: Waves, id: "waterbody-explorer", count: 15 },
   { label: "Map explorer", icon: MapIcon, id: "map-explorer" },
   { label: "Interventions", icon: Droplets, id: "intervention-mix" },
   { label: "Photo analysis", icon: ScanLine, id: "photo-analysis" },
@@ -2253,6 +2255,10 @@ function App() {
   }, [mode]);
 
   useEffect(() => {
+    if (location.pathname.includes("waterbod") || location.search.includes("waterbod")) {
+      setActive("Waterbody Explorer");
+      return;
+    }
     const current = tourSteps.findIndex((step) => step.route === location.pathname);
     if (current >= 0) {
       setWelcomeOpen(false);
@@ -2263,7 +2269,7 @@ function App() {
     } else if (location.pathname === "/dashboard" || location.pathname === "/") {
       if (tourStepIndex !== null) setTourStepIndex(null);
     }
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
   const buildReport = async () => {
     setReportOpen(false);
@@ -2318,6 +2324,23 @@ function App() {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [uploadWizardOpen, reportOpen, settingsOpen]);
+
+  if (active === "Waterbody Explorer") {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex h-screen w-full items-center justify-center bg-slate-950 text-cyan-400 font-sans">
+            <Waves className="animate-spin mr-3 text-cyan-400" size={32} />
+            <span className="text-sm font-semibold tracking-wide text-slate-200">
+              Loading Patna Waterbody Explorer...
+            </span>
+          </div>
+        }
+      >
+        <WaterbodyExplorer onBackToDashboard={() => handleNavigate("Overview", "top")} />
+      </Suspense>
+    );
+  }
 
   return (
     <div className={`app-shell min-h-screen bg-[#f4f7f3] ${collapsed ? "nav-is-collapsed" : ""} ${printReport ? "report-print-mode" : ""}`} id="top">
@@ -2446,6 +2469,13 @@ function App() {
               <h1>Smarter Watersheds,<br /><span>Across All of India.</span></h1>
               <p>Explore representative watershed examples spanning India’s varied landscapes, from the Himalayas and northeast to the Deccan and southern coast.</p>
               <div className="hero-actions">
+                <button
+                  className="hero-primary"
+                  style={{ background: "linear-gradient(135deg, #0284c7 0%, #0d9488 100%)", borderColor: "rgba(255,255,255,0.3)" }}
+                  onClick={() => handleNavigate("Waterbody Explorer", "top")}
+                >
+                  <Waves size={17} /> Patna Waterbodies (15 Sites)
+                </button>
                 <button className="hero-primary" onClick={() => handleNavigate("Map explorer", "map-explorer")}>Explore watershed <ArrowRight size={17} /></button>
                 <button className="hero-secondary" onClick={openUploadWizard}><Upload size={16} /> Add field photo</button>
               </div>
@@ -2588,6 +2618,26 @@ function App() {
                   <p>Pan, zoom, switch basemaps & toggle layer tree categories</p>
                 </div>
                 <div className="map-heading-actions">
+                  <button
+                    className="report-button"
+                    style={{
+                      background: "rgba(6, 182, 212, 0.12)",
+                      color: "#0891b2",
+                      border: "1px solid rgba(6, 182, 212, 0.35)",
+                      padding: "5px 12px",
+                      fontSize: "12px",
+                      borderRadius: "8px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                    onClick={() => handleNavigate("Waterbody Explorer", "top")}
+                    title="Open Patna Waterbody Explorer (15 Ground Truth Sites)"
+                  >
+                    <Waves size={15} /> Patna Waterbodies (15)
+                  </button>
                   <button
                     className={`icon-button filter-button ${attentionOnly ? "filter-active" : ""}`}
                     title="Show sites needing verification"

@@ -16,11 +16,15 @@ from app.db.init_db import init_db
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize DB tables and seed default records
-    db = SessionLocal()
     try:
-        init_db(db)
-    finally:
-        db.close()
+        db = SessionLocal()
+        try:
+            init_db(db)
+        finally:
+            db.close()
+    except Exception as e:
+        import logging
+        logging.getLogger("uvicorn.error").warning(f"Database initialization deferred: {e}")
     yield
 
 app = FastAPI(
@@ -64,6 +68,8 @@ if settings.APP_ENV != "production" or os.environ.get("VERCEL") is None:
 
 # Include Routers
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+from app.api.v1.waterbodies import router as waterbodies_direct_router
+app.include_router(waterbodies_direct_router, prefix="/api")
 
 @app.get("/health", tags=["Health"])
 @app.get(f"{settings.API_V1_PREFIX}/health", tags=["Health"])
@@ -99,4 +105,5 @@ def health_check(db: Session = Depends(get_db)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False)

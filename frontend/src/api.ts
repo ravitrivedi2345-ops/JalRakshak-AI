@@ -533,4 +533,142 @@ export async function triggerSatelliteProcessing(watershedCode: string, epoch: s
   }
 }
 
+// ── Waterbody Explorer (Patna, Bihar) API Services ───────────────────────────
+import {
+  verifiedPatnaWaterbodies,
+  fallbackPatnaHistory,
+  type WaterbodyItem,
+  type WaterbodyHistory,
+  type WaterbodySummary
+} from "./patnaWaterbodiesData";
+
+export async function fetchWaterbodies(params?: {
+  q?: string;
+  status?: string;
+  priority?: string;
+  waterbody_type?: string;
+  district?: string;
+  sort_by?: string;
+  sort_order?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ items: WaterbodyItem[]; total: number; page: number; limit: number }> {
+  try {
+    const { data } = await apiClient.get("/api/v1/waterbodies", { params });
+    if (data?.data?.items) {
+      return data.data;
+    }
+  } catch {
+    // Graceful offline / demo fallback
+  }
+
+  // Fallback to verified Patna waterbody dataset with client-side filtering
+  let filtered = [...verifiedPatnaWaterbodies];
+  if (params?.q) {
+    const query = params.q.toLowerCase().trim();
+    filtered = filtered.filter(w => w.name.toLowerCase().includes(query) || w.id.toLowerCase().includes(query));
+  }
+  if (params?.status && params.status !== "all") {
+    filtered = filtered.filter(w => w.inspection_status === params.status);
+  }
+  if (params?.priority && params.priority !== "all") {
+    filtered = filtered.filter(w => w.priority === params.priority);
+  }
+  if (params?.waterbody_type && params.waterbody_type !== "all") {
+    filtered = filtered.filter(w => w.waterbody_type === params.waterbody_type);
+  }
+
+  return {
+    items: filtered,
+    total: filtered.length,
+    page: params?.page || 1,
+    limit: params?.limit || 50
+  };
+}
+
+export async function fetchWaterbodiesSummary(district: string = "Patna"): Promise<WaterbodySummary> {
+  try {
+    const { data } = await apiClient.get("/api/v1/waterbodies/summary", { params: { district } });
+    if (data?.data) {
+      return data.data;
+    }
+  } catch {
+    // Graceful fallback calculation
+  }
+
+  const by_status: Record<string, number> = {
+    not_inspected: 0,
+    pending: 0,
+    verified: 0,
+    action_required: 0,
+    restoration_in_progress: 0
+  };
+  const by_priority: Record<string, number> = { high: 0, medium: 0, low: 0 };
+  const by_type: Record<string, number> = {};
+  let total_area = 0;
+  let verified_boundaries = 0;
+
+  for (const wb of verifiedPatnaWaterbodies) {
+    by_status[wb.inspection_status] = (by_status[wb.inspection_status] || 0) + 1;
+    by_priority[wb.priority] = (by_priority[wb.priority] || 0) + 1;
+    by_type[wb.waterbody_type] = (by_type[wb.waterbody_type] || 0) + 1;
+    if (wb.area_hectares) total_area += wb.area_hectares;
+    if (wb.is_verified_boundary) verified_boundaries++;
+  }
+
+  return {
+    district: "Patna",
+    state: "Bihar",
+    total_waterbodies: verifiedPatnaWaterbodies.length,
+    by_status,
+    by_priority,
+    by_type,
+    total_area_hectares: Number(total_area.toFixed(2)),
+    verified_boundaries_count: verified_boundaries
+  };
+}
+
+export async function fetchWaterbodyDetail(id: string): Promise<WaterbodyItem> {
+  try {
+    const { data } = await apiClient.get(`/api/v1/waterbodies/${id}`);
+    if (data?.data) {
+      return data.data;
+    }
+  } catch {
+    // Fallback
+  }
+  const found = verifiedPatnaWaterbodies.find(w => w.id === id);
+  if (!found) {
+    throw new Error(`Waterbody with ID ${id} not found.`);
+  }
+  return found;
+}
+
+export async function fetchWaterbodyHistory(id: string): Promise<WaterbodyHistory> {
+  try {
+    const { data } = await apiClient.get(`/api/v1/waterbodies/${id}/history`);
+    if (data?.data) {
+      return data.data;
+    }
+  } catch {
+    // Fallback
+  }
+
+  if (fallbackPatnaHistory[id]) {
+    return fallbackPatnaHistory[id];
+  }
+
+  const wb = verifiedPatnaWaterbodies.find(w => w.id === id);
+  return {
+    waterbody_id: id,
+    waterbody_name: wb?.name || id,
+    has_history: false,
+    measurement_trend_available: false,
+    inspections: [],
+    measurements: [],
+    restorations: [],
+    photos: []
+  };
+}
+
 

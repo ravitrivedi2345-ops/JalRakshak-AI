@@ -7,7 +7,8 @@ from app.models.watershed import Watershed
 from app.models.intervention import Intervention
 from app.models.verification import VerificationTaskModel
 from app.models.notification import Notification
-from app.core.security import get_password_hash
+from app.models.waterbody import Waterbody, WaterbodyInspection, WaterbodyMeasurement, WaterbodyRestoration, WaterbodyFieldPhoto
+from app.db.seed_waterbodies import seed_patna_waterbodies
 
 def init_db(db: Session):
     Base.metadata.create_all(bind=engine)
@@ -112,5 +113,8 @@ def init_db(db: Session):
             is_read=False,
             created_at=datetime.now(timezone.utc)
         ))
+
+    # Seed Patna Waterbodies, Inspections & Measurements
+    seed_patna_waterbodies(db)
 
     db.commit()
