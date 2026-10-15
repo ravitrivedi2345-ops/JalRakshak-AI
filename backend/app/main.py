@@ -13,6 +13,17 @@ from app.api.router import api_router
 from app.db.session import SessionLocal, get_db
 from app.db.init_db import init_db
 
+# Initialize DB tables and seed default records
+try:
+    _init_session = SessionLocal()
+    try:
+        init_db(_init_session)
+    finally:
+        _init_session.close()
+except Exception as _db_err:
+    import logging
+    logging.getLogger("uvicorn.error").warning(f"Immediate database initialization deferred: {_db_err}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize DB tables and seed default records
