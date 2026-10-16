@@ -473,6 +473,9 @@ export const FALLBACK_STUDY_AREAS: StudyAreaItem[] = [
     disambiguation_notes: "Catchment extends across Raichur (Karnataka), Jogulamba Gadwal (Telangana) and Kurnool (Andhra Pradesh).",
     available_layers: ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds", "interventions-recharge"],
     layer_counts: { streams: 16, waterbodies: 9, interventions: 21 },
+    waterbody_dataset_status: "not_imported",
+    has_ground_truth_records: false,
+    last_updated: "2026-04-10",
     has_boundary_geometry: true,
     geometry: {
       type: "Polygon",
@@ -495,6 +498,9 @@ export const FALLBACK_STUDY_AREAS: StudyAreaItem[] = [
     disambiguation_notes: null,
     available_layers: ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-farmponds", "interventions-recharge"],
     layer_counts: { streams: 11, waterbodies: 6, interventions: 24 },
+    waterbody_dataset_status: "not_imported",
+    has_ground_truth_records: false,
+    last_updated: "2026-04-10",
     has_boundary_geometry: true,
     geometry: {
       type: "Polygon",
@@ -517,6 +523,9 @@ export const FALLBACK_STUDY_AREAS: StudyAreaItem[] = [
     disambiguation_notes: null,
     available_layers: ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds"],
     layer_counts: { streams: 22, waterbodies: 14, interventions: 35 },
+    waterbody_dataset_status: "not_imported",
+    has_ground_truth_records: false,
+    last_updated: "2026-04-10",
     has_boundary_geometry: true,
     geometry: {
       type: "Polygon",
@@ -539,6 +548,9 @@ export const FALLBACK_STUDY_AREAS: StudyAreaItem[] = [
     disambiguation_notes: "Wardha-Wainganga catchment delineation. Verify micro-watershed boundary against local Jalyukt Shivar GIS layers.",
     available_layers: ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds"],
     layer_counts: { streams: 19, waterbodies: 11, interventions: 28 },
+    waterbody_dataset_status: "not_imported",
+    has_ground_truth_records: false,
+    last_updated: "2026-04-10",
     has_boundary_geometry: true,
     geometry: {
       type: "Polygon",
@@ -561,6 +573,9 @@ export const FALLBACK_STUDY_AREAS: StudyAreaItem[] = [
     disambiguation_notes: null,
     available_layers: ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-farmponds"],
     layer_counts: { streams: 7, waterbodies: 5, interventions: 16 },
+    waterbody_dataset_status: "not_imported",
+    has_ground_truth_records: false,
+    last_updated: "2026-04-10",
     has_boundary_geometry: true,
     geometry: {
       type: "Polygon",

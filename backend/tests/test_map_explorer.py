@@ -296,3 +296,96 @@ def test_dedicated_study_areas_api():
     assert r_wb_param.json()["data"]["total"] == 0
 
 
+def test_invalid_study_area_ids_return_404():
+    """Verify Section 11 requirement: Invalid study-area IDs return an appropriate 404 response."""
+    invalid_id = "non-existent-watershed-xyz"
+
+    # Detail
+    r1 = client.get(f"/api/study-areas/{invalid_id}")
+    assert r1.status_code == 404
+    assert r1.json()["error"]["code"] == "STUDY_AREA_NOT_FOUND"
+
+    # Boundary
+    r2 = client.get(f"/api/study-areas/{invalid_id}/boundary")
+    assert r2.status_code == 404
+    assert r2.json()["error"]["code"] == "STUDY_AREA_NOT_FOUND"
+
+    # Waterbodies
+    r3 = client.get(f"/api/study-areas/{invalid_id}/waterbodies")
+    assert r3.status_code == 404
+    assert r3.json()["error"]["code"] == "STUDY_AREA_NOT_FOUND"
+
+    # Summary
+    r4 = client.get(f"/api/study-areas/{invalid_id}/summary")
+    assert r4.status_code == 404
+    assert r4.json()["error"]["code"] == "STUDY_AREA_NOT_FOUND"
+
+    # Ground truth sites
+    r5 = client.get(f"/api/study-areas/{invalid_id}/ground-truth-sites")
+    assert r5.status_code == 404
+    assert r5.json()["error"]["code"] == "STUDY_AREA_NOT_FOUND"
+
+
+def test_all_seven_study_areas_geojson_validity():
+    """Verify all 7 study areas have valid WGS84 GeoJSON geometries and compliant properties."""
+    expected_ids = [
+        "patna-bihar",
+        "kolar-sub-basin",
+        "raichur-tungabhadra-catchment",
+        "anantapur-arid-watershed",
+        "bundelkhand-recharge-zone",
+        "vidarbha-basin",
+        "thar-canal-command-area",
+    ]
+
+    r_list = client.get("/api/study-areas")
+    assert r_list.status_code == 200
+    items = r_list.json()["data"]
+    item_ids = [a["id"] for a in items]
+
+    for expected in expected_ids:
+        assert expected in item_ids
+
+    # Check each boundary GeoJSON
+    for sa in items:
+        sa_id = sa["id"]
+        r_bnd = client.get(f"/api/study-areas/{sa_id}/boundary")
+        assert r_bnd.status_code == 200
+        feat = r_bnd.json()["data"]
+
+        assert feat["type"] == "Feature"
+        geom = feat["geometry"]
+        assert geom["type"] == "Polygon"
+        rings = geom["coordinates"]
+        assert len(rings) >= 1
+
+        # Check coordinate bounds inside India geographic envelope (approx lon 68-98, lat 8-38)
+        for ring in rings:
+            assert len(ring) >= 4  # Closed polygon has at least 4 coords
+            assert ring[0] == ring[-1]  # First and last coordinates match (closed ring)
+            for lon, lat in ring:
+                assert 68.0 <= lon <= 98.0
+                assert 8.0 <= lat <= 38.0
+
+
+def test_study_area_search_by_aliases():
+    """Verify searching study areas by aliases works for all 6 new study areas + Patna."""
+    test_queries = [
+        ("Kolar Watershed", "kolar-sub-basin"),
+        ("Tungabhadra", "raichur-tungabhadra-catchment"),
+        ("Ananthapuramu", "anantapur-arid-watershed"),
+        ("Bundelkhand Recharge", "bundelkhand-recharge-zone"),
+        ("Vidarbha Watershed", "vidarbha-basin"),
+        ("Rajasthan Canal", "thar-canal-command-area"),
+        ("Lower Ganga", "patna-bihar"),
+    ]
+
+    for query, expected_id in test_queries:
+        r = client.get(f"/api/study-areas?q={query}")
+        assert r.status_code == 200
+        results = r.json()["data"]
+        assert len(results) >= 1
+        assert any(item["id"] == expected_id for item in results)
+
+
+

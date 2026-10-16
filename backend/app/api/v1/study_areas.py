@@ -116,6 +116,14 @@ def get_study_area_boundary(
     )
 
 
+def validate_study_area_exists(study_area_id: str) -> Optional[Dict[str, Any]]:
+    """Helper to check if a study area ID is valid in registry."""
+    clean_id = study_area_id.lower().strip()
+    if clean_id in ["patna-bihar", "patna"]:
+        return next((item for item in STUDY_AREAS_DATA if item["id"] == "patna-bihar"), None)
+    return next((item for item in STUDY_AREAS_DATA if item["id"] == clean_id), None)
+
+
 @router.get("/{study_area_id}/waterbodies")
 def get_study_area_waterbodies(
     study_area_id: str = Path(..., description="Study area ID"),
@@ -134,6 +142,14 @@ def get_study_area_waterbodies(
     """
     clean_id = study_area_id.lower().strip()
     is_patna = clean_id in ["patna-bihar", "patna"]
+
+    target = validate_study_area_exists(study_area_id)
+    if not target:
+        return create_error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="STUDY_AREA_NOT_FOUND",
+            message=f"Study area '{study_area_id}' not found in registry"
+        )
 
     if is_patna:
         query = db.query(Waterbody).filter(Waterbody.district.ilike("%Patna%"))
@@ -249,6 +265,14 @@ def get_study_area_summary(
     clean_id = study_area_id.lower().strip()
     is_patna = clean_id in ["patna-bihar", "patna"]
 
+    target = validate_study_area_exists(study_area_id)
+    if not target:
+        return create_error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="STUDY_AREA_NOT_FOUND",
+            message=f"Study area '{study_area_id}' not found in registry"
+        )
+
     if is_patna:
         query = db.query(Waterbody).filter(Waterbody.district.ilike("%Patna%"))
         waterbodies = query.all()
@@ -291,9 +315,8 @@ def get_study_area_summary(
         return create_success_response(data=summary_data, message="Patna summary retrieved successfully")
 
     # Non-Patna study area
-    target = next((item for item in STUDY_AREAS_DATA if item["id"] == study_area_id), None)
-    name = target["name"] if target else study_area_id
-    region = target["region"] if target else ""
+    name = target["name"]
+    region = target["region"]
 
     summary_data = {
         "study_area_id": study_area_id,
@@ -324,6 +347,14 @@ def get_study_area_ground_truth_sites(
     Patna returns its 15 sites; other areas return empty list.
     """
     clean_id = study_area_id.lower().strip()
+
+    target = validate_study_area_exists(study_area_id)
+    if not target:
+        return create_error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="STUDY_AREA_NOT_FOUND",
+            message=f"Study area '{study_area_id}' not found in registry"
+        )
     if clean_id in ["patna-bihar", "patna"]:
         waterbodies = db.query(Waterbody).filter(Waterbody.district.ilike("%Patna%")).all()
         sites = []
