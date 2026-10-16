@@ -4,6 +4,7 @@ Verifies layer registry, administrative boundaries, watersheds, hydrology,
 interventions, multi-entity search, and feature detail retrieval.
 """
 
+import json
 from fastapi.testclient import TestClient
 from app.main import app
 
@@ -386,6 +387,170 @@ def test_study_area_search_by_aliases():
         results = r.json()["data"]
         assert len(results) >= 1
         assert any(item["id"] == expected_id for item in results)
+
+
+def test_authoritative_data_sources_registry():
+    """Verify Section 2: Authoritative GIS data sources are documented and accessible."""
+    resp = client.get("/api/study-areas/data-sources")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    sources = data["data"]
+    assert len(sources) >= 5
+
+    source_ids = [s["id"] for s in sources]
+    assert "src-nwdp-surface-water" in source_ids
+    assert "src-bhuvan-wbis" in source_ids
+    assert "src-apsac-watershed" in source_ids
+    assert "src-cgwb-aquifer" in source_ids
+
+    # Validate schema of each source
+    for s in sources:
+        assert "publisher" in s
+        assert "title" in s
+        assert "url" in s
+        assert "license" in s
+        assert "observation_date" in s
+        assert "spatial_resolution" in s
+        assert "crs" in s
+        assert "known_limitations" in s
+
+
+def test_feature_categories_symbology():
+    """Verify Section 3: Feature categories coverage across all 10 required types."""
+    resp = client.get("/api/study-areas/categories")
+    assert resp.status_code == 200
+    cats = resp.json()["data"]
+    assert len(cats) >= 10
+
+    cat_keys = list(cats.keys()) if isinstance(cats, dict) else [c["id"] for c in cats]
+    expected_categories = [
+        "lake_pond", "village_pond_tank", "reservoir",
+        "seasonal_waterbody", "farm_pond", "check_dam",
+        "percolation_tank", "river_stream", "canal_distributary",
+        "waterlogged_area"
+    ]
+    for exp in expected_categories:
+        assert exp in cat_keys
+
+
+def test_multi_region_inventory_loading_and_filtering():
+    """Verify Section 3 & 4: Loading authoritative inventory across study areas and category filtering."""
+    # 1. Load inventory for Thar Canal Command Area
+    resp_thar = client.get("/api/study-areas/thar-canal-command-area/waterbodies?load_inventory=true")
+    assert resp_thar.status_code == 200
+    thar_data = resp_thar.json()["data"]
+    assert thar_data["study_area_id"] == "thar-canal-command-area"
+    assert thar_data["waterbody_dataset_status"] == "imported"
+    assert thar_data["total"] >= 2
+    assert len(thar_data["items"]) >= 2
+
+    # Check waterlogged area is separated
+    waterlogged = next((item for item in thar_data["items"] if item["feature_category"] == "waterlogged_area"), None)
+    assert waterlogged is not None
+    assert "seepage" in waterlogged["name"].lower() or "waterlogged" in waterlogged["name"].lower()
+    assert waterlogged["area_hectares"] > 0
+
+    # 2. Filter by category (e.g. check dams in Kolar)
+    resp_kolar_cd = client.get("/api/study-areas/kolar-sub-basin/waterbodies?load_inventory=true&category=check_dam")
+    assert resp_kolar_cd.status_code == 200
+    kolar_cd_data = resp_kolar_cd.json()["data"]
+    assert all(item["feature_category"] == "check_dam" for item in kolar_cd_data["items"])
+
+    # 3. GeoJSON format export
+    resp_gj = client.get("/api/study-areas/raichur-tungabhadra-catchment/waterbodies?load_inventory=true&format=geojson")
+    assert resp_gj.status_code == 200
+    gj = resp_gj.json()
+    assert gj["type"] == "FeatureCollection"
+    assert len(gj["features"]) >= 2
+    assert gj["features"][0]["geometry"]["type"] in ["Polygon", "LineString", "Point"]
+
+
+def test_spatial_analysis_endpoint():
+    """Verify Section 5: Spatial analysis generation for study areas with multi-epoch water-spread."""
+    # Anantapur Arid Watershed analysis
+    resp = client.get("/api/study-areas/anantapur-arid-watershed/analysis")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+
+    # 1. Inventory metrics
+    inv = data["inventory_metrics"]
+    assert inv["total_waterbody_records"] >= 2
+    assert inv["total_mapped_area_ha"] > 0
+    assert "village_pond_tank" in inv["category_distribution"]
+
+    # 2. Historical water spread
+    hws = data["historical_water_spread"]
+    assert len(hws["epochs"]) >= 2
+    assert "seasonal_delta_ha" in hws
+    assert "seasonal_expansion_pct" in hws
+
+    # 3. Conservation analysis
+    cons = data["conservation_analysis"]
+    assert "check_dams" in cons
+    assert "farm_ponds" in cons
+
+    # 4. Environmental change flags
+    env = data["environmental_change_analysis"]
+    assert len(env["flags"]) >= 1
+
+
+def test_gis_layers_catalog_and_exports():
+    """Verify Section 7 & 10: Layer catalog retrieval and CSV/GeoJSON exports."""
+    # 1. Layer catalog
+    resp_layers = client.get("/api/study-areas/vidarbha-basin/layers")
+    assert resp_layers.status_code == 200
+    layers = resp_layers.json()["data"]["layers"]
+    layer_ids = [l["id"] for l in layers]
+    assert "boundary" in layer_ids
+    assert "waterbodies" in layer_ids
+    assert "rivers" in layer_ids
+    assert "conservation" in layer_ids
+
+    # 2. CSV Export
+    resp_csv = client.get("/api/study-areas/bundelkhand-recharge-zone/export?format=csv")
+    assert resp_csv.status_code == 200
+    assert "text/csv" in resp_csv.headers["content-type"]
+    assert "Internal_ID,Source_ID,Name,Category" in resp_csv.text
+
+    # 3. GeoJSON Export
+    resp_export_gj = client.get("/api/study-areas/bundelkhand-recharge-zone/export?format=geojson")
+    assert resp_export_gj.status_code == 200
+    export_gj = resp_export_gj.json()
+    assert export_gj["type"] == "FeatureCollection"
+    assert len(export_gj["features"]) >= 1
+
+
+def test_pipeline_ingest_endpoint():
+    """Verify Section 2: Reusable ingestion pipeline for GeoJSON and CSV coordinates."""
+    # Test GeoJSON ingestion
+    geojson_payload = {
+        "format_type": "geojson",
+        "payload_content": json.dumps({
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [77.55, 22.95]
+                    },
+                    "properties": {
+                        "name": "Pipeline Ingested Percolation Tank",
+                        "category": "percolation_tank",
+                        "area_ha": 2.5
+                    }
+                }
+            ]
+        }),
+        "source_citation": "Bhopal WRD Field Survey Batch 2026"
+    }
+    resp = client.post("/api/study-areas/kolar-sub-basin/pipeline/ingest", json=geojson_payload)
+    assert resp.status_code == 200
+    result = resp.json()["data"]
+    assert result["imported_count"] == 1
+    assert "kolar-sub-basin" in result["study_area_id"]
+
 
 
 

@@ -640,20 +640,34 @@ export async function uploadStudyAreaBoundary(
 
 export async function fetchStudyAreaWaterbodies(
   studyAreaId: string,
-  params?: { q?: string; status?: string; priority?: string; page?: number; limit?: number }
+  params?: {
+    q?: string;
+    status?: string;
+    priority?: string;
+    category?: string;
+    verification_status?: string;
+    load_inventory?: boolean;
+    bbox?: string;
+    page?: number;
+    limit?: number;
+    format?: string;
+  }
 ): Promise<any> {
   try {
     const { data } = await api.get(`/api/v1/study-areas/${studyAreaId}/waterbodies`, { params });
     if (data?.data) return data.data;
+    if (data?.type === "FeatureCollection") return data;
   } catch {
     // Fallback
   }
   return { items: [], total: 0, study_area_id: studyAreaId, waterbody_dataset_status: "not_imported" };
 }
 
-export async function fetchStudyAreaSummary(studyAreaId: string): Promise<any> {
+export async function fetchStudyAreaSummary(studyAreaId: string, loadInventory: boolean = false): Promise<any> {
   try {
-    const { data } = await api.get(`/api/v1/study-areas/${studyAreaId}/summary`);
+    const { data } = await api.get(`/api/v1/study-areas/${studyAreaId}/summary`, {
+      params: { load_inventory: loadInventory }
+    });
     if (data?.data) return data.data;
   } catch {
     // Fallback
@@ -672,6 +686,55 @@ export async function fetchStudyAreaSummary(studyAreaId: string): Promise<any> {
     waterbody_dataset_status: "not_imported",
     message: "No verified waterbody records are available for this study area yet."
   };
+}
+
+export async function fetchDataSources(): Promise<any[]> {
+  try {
+    const { data } = await api.get("/api/v1/study-areas/data-sources");
+    if (data?.data) return data.data;
+  } catch {
+    // Return empty fallback
+  }
+  return [];
+}
+
+export async function fetchStudyAreaAnalysis(studyAreaId: string): Promise<any> {
+  try {
+    const { data } = await api.get(`/api/v1/study-areas/${studyAreaId}/analysis`);
+    if (data?.data) return data.data;
+  } catch {
+    // Return empty fallback
+  }
+  return null;
+}
+
+export async function fetchStudyAreaLayers(studyAreaId: string): Promise<any[]> {
+  try {
+    const { data } = await api.get(`/api/v1/study-areas/${studyAreaId}/layers`);
+    if (data?.data?.layers) return data.data.layers;
+  } catch {
+    // Return empty fallback
+  }
+  return [];
+}
+
+export function getExportStudyAreaUrl(studyAreaId: string, format: "csv" | "geojson" = "csv"): string {
+  const baseURL = getApiBaseUrl();
+  return `${baseURL}/api/v1/study-areas/${studyAreaId}/export?format=${format}`;
+}
+
+export async function ingestStudyAreaPipeline(
+  studyAreaId: string,
+  formatType: "geojson" | "csv",
+  payloadContent: string,
+  sourceCitation: string = "User Admin GIS Ingest"
+): Promise<any> {
+  const { data } = await api.post(`/api/v1/study-areas/${studyAreaId}/pipeline/ingest`, {
+    format_type: formatType,
+    payload_content: payloadContent,
+    source_citation: sourceCitation
+  });
+  return data?.data;
 }
 
 export async function importStudyAreaWaterbodies(

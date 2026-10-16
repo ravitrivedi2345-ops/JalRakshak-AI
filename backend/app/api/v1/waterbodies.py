@@ -385,6 +385,47 @@ def get_waterbody_detail(
     """
     wb = db.query(Waterbody).filter(Waterbody.id == waterbody_id).first()
     if not wb:
+        from app.services.multi_region_inventory_service import MULTI_REGION_WATERBODIES, get_waterbody_geojson_feature
+        mr_wb = next((item for item in MULTI_REGION_WATERBODIES if str(item["id"]) == str(waterbody_id) or str(item.get("source_id")) == str(waterbody_id)), None)
+        if mr_wb:
+            geom = get_waterbody_geojson_feature(mr_wb)["geometry"]
+            detail = {
+                "id": mr_wb["id"],
+                "source_id": mr_wb.get("source_id"),
+                "name": mr_wb["name"],
+                "district": mr_wb["district"],
+                "state": mr_wb["state"],
+                "village": mr_wb.get("village"),
+                "basin": mr_wb.get("basin"),
+                "watershed": mr_wb.get("watershed"),
+                "sub_watershed": mr_wb.get("sub_watershed"),
+                "latitude": mr_wb["latitude"],
+                "longitude": mr_wb["longitude"],
+                "waterbody_type": mr_wb["feature_category"],
+                "feature_category": mr_wb["feature_category"],
+                "feature_subtype": mr_wb.get("feature_subtype"),
+                "area_hectares": mr_wb.get("area_hectares"),
+                "length_meters": mr_wb.get("length_meters"),
+                "inspection_status": mr_wb.get("inspection_status", "not_inspected"),
+                "verification_status": mr_wb.get("verification_status", "imported_source"),
+                "priority": mr_wb.get("priority", "medium"),
+                "priority_reason": mr_wb.get("priority_reason"),
+                "data_source": mr_wb.get("source_publisher"),
+                "dataset_name": mr_wb.get("dataset_name"),
+                "license": mr_wb.get("license"),
+                "observation_date": mr_wb.get("observation_date"),
+                "import_date": mr_wb.get("import_date"),
+                "is_verified_boundary": mr_wb.get("is_verified_boundary", False),
+                "has_polygon": geom["type"] == "Polygon",
+                "boundary": geom if geom["type"] == "Polygon" else None,
+                "inspections_count": 0,
+                "measurements_count": len(mr_wb.get("historical_observations", [])),
+                "restorations_count": 0,
+                "photos_count": 0,
+                "historical_observations": mr_wb.get("historical_observations", [])
+            }
+            return create_success_response(data=detail, message="Multi-region waterbody details retrieved")
+
         return create_error_response(
             status_code=status.HTTP_404_NOT_FOUND,
             code="NOT_FOUND",
@@ -437,6 +478,35 @@ def get_waterbody_history(
     """
     wb = db.query(Waterbody).filter(Waterbody.id == waterbody_id).first()
     if not wb:
+        from app.services.multi_region_inventory_service import MULTI_REGION_WATERBODIES
+        mr_wb = next((item for item in MULTI_REGION_WATERBODIES if str(item["id"]) == str(waterbody_id) or str(item.get("source_id")) == str(waterbody_id)), None)
+        if mr_wb:
+            measurements = [
+                {
+                    "id": f"obs-{idx+1}",
+                    "measurement_date": obs["date"],
+                    "water_spread_area_ha": obs["area_ha"],
+                    "water_spread_percentage": round(obs["ndwi_mean"] * 100, 1),
+                    "source": obs["sensor"],
+                    "source_type": "satellite_derived",
+                    "notes": f"Epoch: {obs['epoch']}. Cloud cover: {obs['cloud_cover_pct']}%. {obs.get('notes', '')}",
+                    "is_demo_data": False
+                }
+                for idx, obs in enumerate(mr_wb.get("historical_observations", []))
+            ]
+            history_data = {
+                "waterbody_id": mr_wb["id"],
+                "waterbody_name": mr_wb["name"],
+                "has_history": len(measurements) > 0,
+                "inspections": [],
+                "measurements": measurements,
+                "restorations": [],
+                "photos": [],
+                "measurement_trend_available": len(measurements) >= 2,
+                "historical_observations": mr_wb.get("historical_observations", [])
+            }
+            return create_success_response(data=history_data, message="Multi-region waterbody history retrieved")
+
         return create_error_response(
             status_code=status.HTTP_404_NOT_FOUND,
             code="NOT_FOUND",

@@ -10,11 +10,20 @@ import {
   fetchStudyAreas,
   fetchStudyAreaWaterbodies,
   fetchStudyAreaSummary,
+  fetchDataSources,
+  fetchStudyAreaAnalysis,
+  getExportStudyAreaUrl,
   FALLBACK_STUDY_AREAS,
 } from "./map/mapApi";
-import type { StudyAreaItem } from "./map/mapTypes";
+import type {
+  StudyAreaItem,
+  StudyAreaSpatialAnalysis,
+  DataSourceMetadata,
+} from "./map/mapTypes";
 import UploadBoundaryModal from "./map/UploadBoundaryModal";
 import ImportWaterbodiesModal from "./map/ImportWaterbodiesModal";
+import StudyAreaSpatialAnalysisModal from "./map/StudyAreaSpatialAnalysisModal";
+import DataSourcesRegistryModal from "./map/DataSourcesRegistryModal";
 import {
   type WaterbodyItem,
   type WaterbodyHistory,
@@ -61,6 +70,10 @@ import {
   Globe,
   Upload,
   FileSpreadsheet,
+  Activity,
+  Download,
+  Droplets,
+  Printer,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -175,6 +188,15 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
   const [importWaterbodiesModalOpen, setImportWaterbodiesModalOpen] = useState<boolean>(false);
   const selectorRef = useRef<HTMLDivElement | null>(null);
 
+  // Section 5 Spatial Analysis & Section 2 Data Sources Modals
+  const [spatialAnalysisModalOpen, setSpatialAnalysisModalOpen] = useState<boolean>(false);
+  const [dataSourcesModalOpen, setDataSourcesModalOpen] = useState<boolean>(false);
+  const [spatialAnalysis, setSpatialAnalysis] = useState<StudyAreaSpatialAnalysis | null>(null);
+  const [dataSources, setDataSources] = useState<DataSourceMetadata[]>([]);
+  const [loadingInventory, setLoadingInventory] = useState<boolean>(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedVerificationStatus, setSelectedVerificationStatus] = useState<string>("all");
+
   // Close study area selector when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -219,6 +241,61 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
     } catch (e) {
       console.error("Failed to update URL query param:", e);
     }
+  };
+
+  // Handler to load authoritative inventory
+  const handleLoadAuthoritativeInventory = async () => {
+    setLoadingInventory(true);
+    try {
+      const [wbRes, sumRes] = await Promise.all([
+        fetchStudyAreaWaterbodies(selectedStudyArea.id, { load_inventory: true, limit: 300 }),
+        fetchStudyAreaSummary(selectedStudyArea.id, true),
+      ]);
+      const items = wbRes.items || [];
+      setWaterbodies(items);
+      setSummary(sumRes);
+      setSelectedStudyArea((prev) => ({ ...prev, waterbody_dataset_status: "imported" }));
+      if (mapRef.current && items.length > 0) {
+        renderMapFeatures(mapRef.current, items);
+      }
+    } catch (err) {
+      console.error("Failed to load authoritative inventory:", err);
+    } finally {
+      setLoadingInventory(false);
+    }
+  };
+
+  // Open Spatial Analysis Modal
+  const handleOpenSpatialAnalysis = async () => {
+    setSpatialAnalysisModalOpen(true);
+    try {
+      const data = await fetchStudyAreaAnalysis(selectedStudyArea.id);
+      setSpatialAnalysis(data);
+    } catch (err) {
+      console.error("Failed to fetch spatial analysis:", err);
+    }
+  };
+
+  // Open Data Sources Modal
+  const handleOpenDataSources = async () => {
+    setDataSourcesModalOpen(true);
+    try {
+      const data = await fetchDataSources();
+      setDataSources(data);
+    } catch (err) {
+      console.error("Failed to fetch data sources:", err);
+    }
+  };
+
+  // Direct CSV and GeoJSON Exports
+  const handleExportCsv = () => {
+    const url = getExportStudyAreaUrl(selectedStudyArea.id, "csv");
+    window.open(url, "_blank");
+  };
+
+  const handleExportGeoJson = () => {
+    const url = getExportStudyAreaUrl(selectedStudyArea.id, "geojson");
+    window.open(url, "_blank");
   };
 
   // 1. Fetch Waterbodies & Summary for current study area
@@ -289,9 +366,10 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchesName = wb.name.toLowerCase().includes(q);
-        const matchesId = wb.id.toLowerCase().includes(q);
-        const matchesType = wb.waterbody_type.toLowerCase().includes(q);
-        if (!matchesName && !matchesId && !matchesType) return false;
+        const matchesId = wb.id.toLowerCase().includes(q) || (wb.source_id && wb.source_id.toLowerCase().includes(q));
+        const matchesType = wb.waterbody_type.toLowerCase().includes(q) || (wb.feature_category && wb.feature_category.toLowerCase().includes(q));
+        const matchesVillage = wb.village && wb.village.toLowerCase().includes(q);
+        if (!matchesName && !matchesId && !matchesType && !matchesVillage) return false;
       }
       // Status
       if (selectedStatus !== "all" && wb.inspection_status !== selectedStatus) {
@@ -304,6 +382,16 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
       // Type
       if (selectedType !== "all" && wb.waterbody_type !== selectedType) {
         return false;
+      }
+      // Section 3 Category filter
+      if (selectedCategory !== "all") {
+        const cat = wb.feature_category || wb.waterbody_type;
+        if (cat !== selectedCategory) return false;
+      }
+      // Section 4 Verification status filter
+      if (selectedVerificationStatus !== "all") {
+        const vStatus = wb.verification_status || (wb.is_verified_boundary ? "field_verified" : "unverified_candidate");
+        if (vStatus !== selectedVerificationStatus) return false;
       }
       return true;
     }).sort((a, b) => {
@@ -324,7 +412,7 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
       }
       return 0;
     });
-  }, [waterbodies, searchQuery, selectedStatus, selectedPriority, selectedType, sortBy]);
+  }, [waterbodies, searchQuery, selectedStatus, selectedPriority, selectedType, selectedCategory, selectedVerificationStatus, sortBy]);
 
   // 4. Boundary visualization and fitBounds for selected study area
   const updateMapBoundary = useCallback((map: MapLibreMap, area: StudyAreaItem) => {
@@ -489,11 +577,28 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
-    // Construct GeoJSON FeatureCollection for polygons
+    // Construct GeoJSON FeatureCollection for polygons and lines
     const polygonFeatures: any[] = [];
 
-    items.forEach((wb) => {
-      if (wb.has_polygon && wb.boundary) {
+    items.forEach((wb: any) => {
+      let geom = wb.boundary;
+      if (!geom && wb.coordinates) {
+        if (wb.feature_category === "river_stream" || wb.feature_category === "canal_distributary") {
+          geom = { type: "LineString", coordinates: wb.coordinates };
+        } else {
+          geom = { type: "Polygon", coordinates: wb.coordinates };
+        }
+      }
+
+      if (geom) {
+        let featColor = STATUS_CONFIG[wb.inspection_status as InspectionStatus]?.color || "#3b82f6";
+        if (wb.feature_category === "waterlogged_area") featColor = "#f43f5e";
+        else if (wb.feature_category === "canal_distributary") featColor = "#8b5cf6";
+        else if (wb.feature_category === "river_stream") featColor = "#0ea5e9";
+        else if (wb.feature_category === "check_dam") featColor = "#f97316";
+        else if (wb.feature_category === "farm_pond") featColor = "#a3e635";
+        else if (wb.feature_category === "percolation_tank") featColor = "#14b8a6";
+
         polygonFeatures.push({
           type: "Feature",
           id: wb.id,
@@ -501,12 +606,12 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
             id: wb.id,
             name: wb.name,
             status: wb.inspection_status,
-            color: STATUS_CONFIG[wb.inspection_status]?.color || "#3b82f6",
+            color: featColor,
             priority: wb.priority,
             area_ha: wb.area_hectares || 0,
-            type: wb.waterbody_type,
+            type: wb.feature_category || wb.waterbody_type,
           },
-          geometry: wb.boundary,
+          geometry: geom,
         });
       }
     });
@@ -525,11 +630,12 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
         data: geojsonData,
       });
 
-      // Fill Layer
+      // Fill Layer for Polygons
       map.addLayer({
         id: "patna-waterbodies-fill",
         type: "fill",
         source: "patna-waterbodies-poly",
+        filter: ["==", "$type", "Polygon"],
         paint: {
           "fill-color": ["get", "color"],
           "fill-opacity": [
@@ -541,11 +647,12 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
         },
       });
 
-      // Outline Layer
+      // Outline Layer for Polygons
       map.addLayer({
         id: "patna-waterbodies-outline",
         type: "line",
         source: "patna-waterbodies-poly",
+        filter: ["==", "$type", "Polygon"],
         paint: {
           "line-color": ["get", "color"],
           "line-width": [
@@ -557,8 +664,30 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
         },
       });
 
-      // Interactive Click on Polygons
+      // LineString Layer for Rivers & Canals
+      map.addLayer({
+        id: "study-area-lines",
+        type: "line",
+        source: "patna-waterbodies-poly",
+        filter: ["==", "$type", "LineString"],
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": 3.0,
+          "line-opacity": 0.9,
+        },
+      });
+
+      // Interactive Click on Polygons & Lines
       map.on("click", "patna-waterbodies-fill", (e) => {
+        if (e.features && e.features[0]) {
+          const clickedId = e.features[0].properties.id;
+          const found = items.find((w) => w.id === clickedId);
+          if (found) {
+            handleSelectWaterbody(found);
+          }
+        }
+      });
+      map.on("click", "study-area-lines", (e) => {
         if (e.features && e.features[0]) {
           const clickedId = e.features[0].properties.id;
           const found = items.find((w) => w.id === clickedId);
@@ -575,12 +704,25 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
       map.on("mouseleave", "patna-waterbodies-fill", () => {
         map.getCanvas().style.cursor = "";
       });
+      map.on("mouseenter", "study-area-lines", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "study-area-lines", () => {
+        map.getCanvas().style.cursor = "";
+      });
     }
 
     // Add Interactive Point Markers for all locations (especially for those without polygons)
     import("maplibre-gl").then(({ Marker, Popup }) => {
-      items.forEach((wb) => {
-        const statusConfig = STATUS_CONFIG[wb.inspection_status];
+      items.forEach((wb: any) => {
+        const statusConfig = STATUS_CONFIG[wb.inspection_status as InspectionStatus];
+        let markerColor = statusConfig?.color || "#3b82f6";
+        if (wb.feature_category === "waterlogged_area") markerColor = "#f43f5e";
+        else if (wb.feature_category === "canal_distributary") markerColor = "#8b5cf6";
+        else if (wb.feature_category === "river_stream") markerColor = "#0ea5e9";
+        else if (wb.feature_category === "check_dam") markerColor = "#f97316";
+        else if (wb.feature_category === "farm_pond") markerColor = "#a3e635";
+        else if (wb.feature_category === "percolation_tank") markerColor = "#14b8a6";
         const isPointOnly = !wb.has_polygon;
 
         // Custom marker DOM element
@@ -589,9 +731,9 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
         el.style.width = isPointOnly ? "28px" : "22px";
         el.style.height = isPointOnly ? "28px" : "22px";
         el.style.borderRadius = "50%";
-        el.style.backgroundColor = statusConfig.color;
+        el.style.backgroundColor = markerColor;
         el.style.border = isPointOnly ? "3px solid #ffffff" : "2px solid rgba(255,255,255,0.8)";
-        el.style.boxShadow = `0 0 10px ${statusConfig.color}88, 0 2px 4px rgba(0,0,0,0.5)`;
+        el.style.boxShadow = `0 0 10px ${markerColor}88, 0 2px 4px rgba(0,0,0,0.5)`;
         el.style.cursor = "pointer";
         el.style.display = "flex";
         el.style.alignItems = "center";
@@ -896,6 +1038,44 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
             <Compass size={13} className="text-slate-400 hover:text-cyan-400" />
             <span className="hidden sm:inline">Reset Map</span>
           </button>
+
+          {/* Spatial / GIS Analysis Modal Button */}
+          <button
+            onClick={handleOpenSpatialAnalysis}
+            title="Open comprehensive watershed spatial analysis, historical water-spread dynamics, and environmental alerts"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-cyan-200 hover:text-white bg-cyan-950/60 hover:bg-cyan-900/70 border border-cyan-800/80 hover:border-cyan-500 rounded-lg transition shadow-sm"
+          >
+            <Activity size={13} className="text-cyan-400" />
+            <span className="hidden md:inline">GIS Analysis</span>
+          </button>
+
+          {/* Authoritative Data Sources Modal Button */}
+          <button
+            onClick={handleOpenDataSources}
+            title="Inspect Section 2 Authoritative GIS Data Sources (NWDP, Bhuvan WBIS, APSAC, CGWB)"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-lg transition"
+          >
+            <Database size={13} className="text-emerald-400" />
+            <span className="hidden md:inline">Data Sources</span>
+          </button>
+
+          {/* Direct CSV & GeoJSON Export Actions */}
+          <div className="hidden sm:flex items-center gap-1">
+            <button
+              onClick={handleExportCsv}
+              title="Export study area inventory as CSV"
+              className="p-1.5 text-slate-300 hover:text-emerald-300 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-lg transition"
+            >
+              <FileSpreadsheet size={13} />
+            </button>
+            <button
+              onClick={handleExportGeoJson}
+              title="Export study area features as GeoJSON"
+              className="p-1.5 text-slate-300 hover:text-cyan-300 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-lg transition"
+            >
+              <Download size={13} />
+            </button>
+          </div>
         </div>
 
         {/* Right: Basemap Switcher & Filters Toggle */}
@@ -959,6 +1139,84 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
                   <X size={13} />
                 </button>
               )}
+            </div>
+
+            {/* Feature Category Filters (Section 3) */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span className="font-semibold uppercase tracking-wider text-[10px]">Feature Category</span>
+                {selectedCategory !== "all" && (
+                  <button
+                    onClick={() => setSelectedCategory("all")}
+                    className="text-[10px] text-cyan-400 hover:underline"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto pr-0.5">
+                {[
+                  { id: "all", label: "All Categories" },
+                  { id: "lake_pond", label: "Lakes & Ponds" },
+                  { id: "village_pond_tank", label: "Village Tanks" },
+                  { id: "reservoir", label: "Reservoirs" },
+                  { id: "seasonal_waterbody", label: "Seasonal" },
+                  { id: "check_dam", label: "Check Dams" },
+                  { id: "farm_pond", label: "Farm Ponds" },
+                  { id: "percolation_tank", label: "Percolation Tanks" },
+                  { id: "river_stream", label: "Rivers" },
+                  { id: "canal_distributary", label: "Canals" },
+                  { id: "waterlogged_area", label: "Waterlogged" },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.id)}
+                    className={`px-2 py-0.5 text-[10px] rounded-md transition font-medium border ${
+                      selectedCategory === cat.id
+                        ? "bg-teal-600/30 text-teal-300 border-teal-500/60 shadow-sm"
+                        : "bg-slate-950/60 text-slate-400 border-slate-800 hover:text-slate-200"
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Data Provenance & Verification Filter (Section 4 & 9) */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span className="font-semibold uppercase tracking-wider text-[10px]">Verification Provenance</span>
+                {selectedVerificationStatus !== "all" && (
+                  <button
+                    onClick={() => setSelectedVerificationStatus("all")}
+                    className="text-[10px] text-cyan-400 hover:underline"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {[
+                  { id: "all", label: "All" },
+                  { id: "field_verified", label: "Field Verified" },
+                  { id: "satellite_derived", label: "Satellite" },
+                  { id: "imported_source", label: "Govt Source" },
+                  { id: "unverified_candidate", label: "Candidate" },
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    onClick={() => setSelectedVerificationStatus(st.id)}
+                    className={`px-2 py-0.5 text-[10px] rounded-md transition font-medium border ${
+                      selectedVerificationStatus === st.id
+                        ? "bg-indigo-600/30 text-indigo-300 border-indigo-500/60 shadow-sm"
+                        : "bg-slate-950/60 text-slate-400 border-slate-800 hover:text-slate-200"
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Status Filter Chips */}
@@ -1157,14 +1415,26 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
                   {/* Admin Workflows to Import Data or Upload Boundary */}
                   <div className="space-y-2 pt-1">
                     <button
+                      onClick={handleLoadAuthoritativeInventory}
+                      disabled={loadingInventory}
+                      className="w-full py-2.5 px-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-lg shadow-cyan-950/50 transition disabled:opacity-50"
+                    >
+                      {loadingInventory ? (
+                        <RefreshCw className="animate-spin" size={15} />
+                      ) : (
+                        <Database size={15} />
+                      )}
+                      <span>Load Authoritative Inventory (NWDP / Bhuvan)</span>
+                    </button>
+                    <button
                       onClick={() => setImportWaterbodiesModalOpen(true)}
-                      className="w-full py-2 px-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-md shadow-cyan-950/40 transition"
+                      className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-md transition"
                     >
                       <FileSpreadsheet size={15} /> Import GeoJSON / CSV Data
                     </button>
                     <button
                       onClick={() => setUploadBoundaryModalOpen(true)}
-                      className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition"
+                      className="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition"
                     >
                       <Upload size={14} /> Upload / Verify Boundary
                     </button>
@@ -1393,6 +1663,24 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
                           {selectedWaterbody.area_hectares ? `${selectedWaterbody.area_hectares} ha` : "Null (Pending Survey)"}
                         </span>
                       </div>
+                      {selectedWaterbody.source_id && (
+                        <div>
+                          <span className="text-slate-500 block">Source ID:</span>
+                          <span className="font-mono text-cyan-300 font-semibold">{selectedWaterbody.source_id}</span>
+                        </div>
+                      )}
+                      {selectedWaterbody.subtype && (
+                        <div>
+                          <span className="text-slate-500 block">Feature Subtype:</span>
+                          <span className="text-slate-200 font-medium">{selectedWaterbody.subtype}</span>
+                        </div>
+                      )}
+                      {selectedWaterbody.length_m && (
+                        <div>
+                          <span className="text-slate-500 block">Length:</span>
+                          <span className="text-cyan-300 font-mono font-medium">{selectedWaterbody.length_m.toLocaleString()} m</span>
+                        </div>
+                      )}
                       <div>
                         <span className="text-slate-500 block">Boundary Status:</span>
                         <span className="font-semibold text-slate-200 flex items-center gap-1">
@@ -1413,8 +1701,51 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
                           {selectedWaterbody.data_source}
                         </span>
                       </div>
+                      {selectedWaterbody.verification_status && (
+                        <div>
+                          <span className="text-slate-500 block">Verification Status:</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-slate-900 border border-slate-700 text-cyan-300 inline-block">
+                            {selectedWaterbody.verification_status.replace(/_/g, " ")}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
+
+                  {/* Hydrological & Location Context Card */}
+                  {(selectedWaterbody.basin || selectedWaterbody.watershed || selectedWaterbody.village) && (
+                    <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <Compass size={14} className="text-cyan-400" /> Hydrological & Administrative Context
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        {selectedWaterbody.basin && (
+                          <div>
+                            <span className="text-slate-500 block">River Basin:</span>
+                            <span className="text-slate-200 font-medium">{selectedWaterbody.basin}</span>
+                          </div>
+                        )}
+                        {selectedWaterbody.watershed && (
+                          <div>
+                            <span className="text-slate-500 block">Watershed / Sub-basin:</span>
+                            <span className="text-slate-200 font-medium">{selectedWaterbody.watershed}</span>
+                          </div>
+                        )}
+                        {selectedWaterbody.village && (
+                          <div>
+                            <span className="text-slate-500 block">Village / Locality:</span>
+                            <span className="text-slate-200 font-medium">{selectedWaterbody.village}</span>
+                          </div>
+                        )}
+                        {selectedWaterbody.district && (
+                          <div>
+                            <span className="text-slate-500 block">District / State:</span>
+                            <span className="text-slate-200 font-medium">{selectedWaterbody.district}{selectedWaterbody.state ? `, ${selectedWaterbody.state}` : ""}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Priority & Justification Card */}
                   <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-1.5">
@@ -1727,6 +2058,21 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
           setImportWaterbodiesModalOpen(false);
           loadData(selectedStudyArea);
         }}
+      />
+
+      <StudyAreaSpatialAnalysisModal
+        isOpen={spatialAnalysisModalOpen}
+        onClose={() => setSpatialAnalysisModalOpen(false)}
+        studyArea={selectedStudyArea}
+        analysis={spatialAnalysis}
+        onExportCsv={handleExportCsv}
+        onExportGeoJson={handleExportGeoJson}
+      />
+
+      <DataSourcesRegistryModal
+        isOpen={dataSourcesModalOpen}
+        onClose={() => setDataSourcesModalOpen(false)}
+        sources={dataSources}
       />
     </div>
   );

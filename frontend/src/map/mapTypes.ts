@@ -108,4 +108,121 @@ export interface StudyAreaItem {
   geometry?: any;
 }
 
+export type FeatureCategory =
+  | "lake_pond"
+  | "village_pond_tank"
+  | "reservoir"
+  | "seasonal_waterbody"
+  | "farm_pond"
+  | "check_dam"
+  | "percolation_tank"
+  | "river_stream"
+  | "canal_distributary"
+  | "waterlogged_area";
+
+export type VerificationStatus =
+  | "field_verified"
+  | "satellite_derived"
+  | "imported_source"
+  | "unverified_candidate";
+
+export interface HistoricalWaterSpreadObservation {
+  epoch: string;
+  date: string;
+  sensor: string;
+  area_ha: number;
+  ndwi_mean: number;
+  cloud_cover_pct: number;
+  notes?: string;
+}
+
+export interface StudyAreaSpatialAnalysis {
+  study_area_id: string;
+  inventory_metrics: {
+    total_waterbody_records: number;
+    total_mapped_area_ha: number;
+    category_distribution: Record<string, number>;
+    verification_breakdown: Record<string, number>;
+    data_source_citations: string[];
+  };
+  historical_water_spread: {
+    epochs: Array<{
+      epoch: string;
+      date: string;
+      sensor: string;
+      total_spread_ha: number;
+      feature_count: number;
+    }>;
+    pre_monsoon_mean_ha: number;
+    post_monsoon_mean_ha: number;
+    seasonal_delta_ha: number;
+    seasonal_expansion_pct: number;
+    accounting_note: string;
+  };
+  conservation_analysis: {
+    check_dams: number;
+    farm_ponds: number;
+    percolation_tanks: number;
+    total_conservation_structures: number;
+  };
+  environmental_change_analysis: {
+    flags: Array<{
+      type: string;
+      severity: "high" | "medium" | "low";
+      title: string;
+      area_ha: number;
+      evidence: string;
+      observation_date: string;
+      recommended_action: string;
+    }>;
+    methodology: string;
+  };
+}
+
+export interface DataSourceMetadata {
+  id: string;
+  publisher: string;
+  title: string;
+  url: string;
+  license: string;
+  observation_date: string;
+  publication_date: string;
+  spatial_resolution: string;
+  crs: string;
+  geographic_coverage: string;
+  attributes_provided: string[];
+  known_limitations: string;
+}
+
+export interface MultiRegionWaterbodyItem {
+  id: string;
+  source_id?: string;
+  name: string;
+  feature_category: FeatureCategory;
+  feature_subtype?: string;
+  study_area_id: string;
+  latitude: number;
+  longitude: number;
+  area_hectares?: number;
+  length_meters?: number;
+  state: string;
+  district: string;
+  village?: string;
+  basin?: string;
+  watershed?: string;
+  sub_watershed?: string;
+  source_publisher?: string;
+  dataset_name?: string;
+  license?: string;
+  observation_date?: string;
+  import_date?: string;
+  verification_status: VerificationStatus;
+  inspection_status?: string;
+  priority?: string;
+  priority_reason?: string;
+  is_verified_boundary?: boolean;
+  historical_observations?: HistoricalWaterSpreadObservation[];
+  coordinates?: any;
+}
+
 

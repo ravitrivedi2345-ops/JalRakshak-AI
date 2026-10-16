@@ -166,7 +166,7 @@ describe("Watershed Study Area Selector - Section 11 Verification", () => {
         expect(ring[0][1]).toBeCloseTo(ring[ring.length - 1][1]);
 
         // Check WGS84 envelope for India
-        ring.forEach(([lon, lat]) => {
+        ring.forEach(([lon, lat]: [number, number]) => {
           expect(lon).toBeGreaterThanOrEqual(68.0);
           expect(lon).toBeLessThanOrEqual(98.0);
           expect(lat).toBeGreaterThanOrEqual(8.0);
