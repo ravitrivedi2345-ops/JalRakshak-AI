@@ -177,9 +177,10 @@ def test_study_areas_endpoints():
     r_list = client.get("/api/v1/map/study-areas")
     assert r_list.status_code == 200
     areas = r_list.json()["data"]
-    assert len(areas) == 6
+    assert len(areas) == 7
 
     ids = [a["id"] for a in areas]
+    assert "patna-bihar" in ids
     assert "kolar-sub-basin" in ids
     assert "raichur-tungabhadra-catchment" in ids
     assert "anantapur-arid-watershed" in ids
@@ -188,10 +189,16 @@ def test_study_areas_endpoints():
     assert "thar-canal-command-area" in ids
 
     # 2. Check validation statuses
+    patna = next(a for a in areas if a["id"] == "patna-bihar")
+    assert patna["boundary_status"] == "verified"
+    assert patna["waterbody_dataset_status"] == "imported"
+    assert patna["has_ground_truth_records"] is True
+
     anantapur = next(a for a in areas if a["id"] == "anantapur-arid-watershed")
     assert anantapur["boundary_status"] == "verified"
     assert anantapur["region"] == "Andhra Pradesh"
     assert "Ananthapuramu" in anantapur["aliases"]
+    assert anantapur["waterbody_dataset_status"] == "not_imported"
 
     kolar = next(a for a in areas if a["id"] == "kolar-sub-basin")
     assert kolar["boundary_status"] == "pending_verification"
@@ -218,7 +225,7 @@ def test_study_areas_endpoints():
     assert r_coll.status_code == 200
     coll = r_coll.json()["data"]
     assert coll["type"] == "FeatureCollection"
-    assert len(coll["features"]) == 6
+    assert len(coll["features"]) == 7
 
     # 6. Upload boundary update
     new_coords = [[[76.80, 22.70], [77.35, 22.70], [77.40, 23.05], [76.80, 23.05], [76.80, 22.70]]]
@@ -230,4 +237,62 @@ def test_study_areas_endpoints():
     up_data = r_upload.json()["data"]
     assert up_data["properties"]["boundary_status"] == "verified_custom"
     assert "SLUSI" in up_data["properties"]["boundary_source"]
+
+
+def test_dedicated_study_areas_api():
+    """Verify Section 6 proposed study-area endpoints and waterbody separation."""
+    # 1. Direct /api/study-areas
+    r_list = client.get("/api/study-areas")
+    assert r_list.status_code == 200
+    items = r_list.json()["data"]
+    assert len(items) == 7
+    assert any(a["id"] == "patna-bihar" for a in items)
+
+    # 2. Boundary endpoint
+    r_bnd = client.get("/api/study-areas/anantapur-arid-watershed/boundary")
+    assert r_bnd.status_code == 200
+    bnd_data = r_bnd.json()["data"]
+    assert bnd_data["type"] == "Feature"
+    assert bnd_data["geometry"]["type"] == "Polygon"
+
+    # 3. Patna waterbodies vs other waterbodies separation
+    r_patna_wb = client.get("/api/study-areas/patna-bihar/waterbodies")
+    assert r_patna_wb.status_code == 200
+    patna_data = r_patna_wb.json()["data"]
+    assert patna_data["study_area_id"] == "patna-bihar"
+    assert patna_data["waterbody_dataset_status"] == "imported"
+    assert patna_data["total"] >= 15
+
+    # Non-Patna area returns empty without fabricating data
+    r_other_wb = client.get("/api/study-areas/thar-canal-command-area/waterbodies")
+    assert r_other_wb.status_code == 200
+    other_data = r_other_wb.json()["data"]
+    assert other_data["total"] == 0
+    assert len(other_data["items"]) == 0
+    assert other_data["waterbody_dataset_status"] == "not_imported"
+
+    # 4. Summary separation
+    r_sum_patna = client.get("/api/study-areas/patna-bihar/summary")
+    assert r_sum_patna.status_code == 200
+    assert r_sum_patna.json()["data"]["total_waterbodies"] >= 15
+
+    r_sum_other = client.get("/api/study-areas/vidarbha-basin/summary")
+    assert r_sum_other.status_code == 200
+    assert r_sum_other.json()["data"]["total_waterbodies"] == 0
+    assert r_sum_other.json()["data"]["waterbody_dataset_status"] == "not_imported"
+
+    # 5. Ground truth sites separation
+    r_gt_patna = client.get("/api/study-areas/patna-bihar/ground-truth-sites")
+    assert r_gt_patna.status_code == 200
+    assert r_gt_patna.json()["data"]["total"] >= 15
+
+    r_gt_other = client.get("/api/study-areas/kolar-sub-basin/ground-truth-sites")
+    assert r_gt_other.status_code == 200
+    assert r_gt_other.json()["data"]["total"] == 0
+
+    # 6. Waterbodies query with study_area_id param
+    r_wb_param = client.get("/api/v1/waterbodies?study_area_id=bundelkhand-recharge-zone")
+    assert r_wb_param.status_code == 200
+    assert r_wb_param.json()["data"]["total"] == 0
+
 

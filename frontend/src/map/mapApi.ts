@@ -408,10 +408,35 @@ export async function fetchFeatureDetails(featureType: string, featureId: string
 
 export const FALLBACK_STUDY_AREAS: StudyAreaItem[] = [
   {
+    id: "patna-bihar",
+    name: "Patna, Bihar",
+    aliases: ["Patna", "Patna Bihar", "Patna Pilot", "Lower Ganga", "Punpun Basin"],
+    region: "Patna, Bihar",
+    boundary_status: "verified",
+    boundary_source: "Bihar Water Resources Department (WRD) & Survey of India",
+    center: [85.1376, 25.5941],
+    zoom: 12.0,
+    bbox: [85.0000, 25.4800, 85.3800, 25.6800],
+    area_sqkm: 320.5,
+    purpose: "Ground-truth waterbody monitoring, urban wetlands, rejuvenation and Sentinel-2 change detection.",
+    description: "Lower Ganga-Punpun floodplain pilot study area with 15 verified ground truth waterbody inspection sites.",
+    disambiguation_notes: null,
+    available_layers: ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds"],
+    layer_counts: { streams: 6, waterbodies: 15, interventions: 18 },
+    waterbody_dataset_status: "imported",
+    has_ground_truth_records: true,
+    last_updated: "2026-04-18",
+    has_boundary_geometry: true,
+    geometry: {
+      type: "Polygon",
+      coordinates: [[[85.00, 25.50], [85.35, 25.48], [85.38, 25.66], [85.15, 25.68], [85.00, 25.62], [85.00, 25.50]]]
+    }
+  },
+  {
     id: "kolar-sub-basin",
     name: "Kolar Sub-Basin",
     aliases: ["Kolar", "Kolar Sub Basin", "Kolar Watershed", "Kolar MP"],
-    region: "Madhya Pradesh",
+    region: "Madhya Pradesh, pending geographic verification",
     boundary_status: "pending_verification",
     boundary_source: "Central Ground Water Board (CGWB) & Narmada Basin Authority (Provisional)",
     center: [77.10, 22.85],
@@ -422,7 +447,10 @@ export const FALLBACK_STUDY_AREAS: StudyAreaItem[] = [
     description: "Narmada tributary catchment in Sehore and Raisen districts feeding Kolar Dam. Requires administrator confirmation regarding disambiguation from Kolar, Karnataka.",
     disambiguation_notes: "Identified as the Kolar River watershed (Narmada Basin, MP), not to be confused with Kolar District in Karnataka. Upload official SLUSI shapefile if alternate delineation is intended.",
     available_layers: ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds"],
-    layer_counts: { streams: 8, waterbodies: 4, interventions: 12 },
+    layer_counts: { streams: 8, waterbodies: 0, interventions: 12 },
+    waterbody_dataset_status: "not_imported",
+    has_ground_truth_records: false,
+    last_updated: "2026-04-10",
     has_boundary_geometry: true,
     geometry: {
       type: "Polygon",
@@ -594,4 +622,53 @@ export async function uploadStudyAreaBoundary(
   });
   return data?.data;
 }
+
+export async function fetchStudyAreaWaterbodies(
+  studyAreaId: string,
+  params?: { q?: string; status?: string; priority?: string; page?: number; limit?: number }
+): Promise<any> {
+  try {
+    const { data } = await api.get(`/api/v1/study-areas/${studyAreaId}/waterbodies`, { params });
+    if (data?.data) return data.data;
+  } catch {
+    // Fallback
+  }
+  return { items: [], total: 0, study_area_id: studyAreaId, waterbody_dataset_status: "not_imported" };
+}
+
+export async function fetchStudyAreaSummary(studyAreaId: string): Promise<any> {
+  try {
+    const { data } = await api.get(`/api/v1/study-areas/${studyAreaId}/summary`);
+    if (data?.data) return data.data;
+  } catch {
+    // Fallback
+  }
+  const fallback = FALLBACK_STUDY_AREAS.find((a) => a.id === studyAreaId);
+  return {
+    study_area_id: studyAreaId,
+    name: fallback?.name || studyAreaId,
+    region: fallback?.region || "",
+    total_waterbodies: 0,
+    by_status: { not_inspected: 0, pending: 0, verified: 0, action_required: 0, restoration_in_progress: 0 },
+    by_priority: { high: 0, medium: 0, low: 0 },
+    by_type: {},
+    total_area_hectares: 0.0,
+    verified_boundaries_count: 0,
+    waterbody_dataset_status: "not_imported",
+    message: "No verified waterbody records are available for this study area yet."
+  };
+}
+
+export async function importStudyAreaWaterbodies(
+  studyAreaId: string,
+  items: any[],
+  sourceCitation: string = "Admin Field Survey"
+): Promise<any> {
+  const { data } = await api.post(`/api/v1/study-areas/${studyAreaId}/import-waterbodies`, {
+    items,
+    source_citation: sourceCitation
+  });
+  return data?.data;
+}
+
 

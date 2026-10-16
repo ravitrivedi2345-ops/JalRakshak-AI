@@ -81,6 +81,8 @@ if settings.APP_ENV != "production" or os.environ.get("VERCEL") is None:
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 from app.api.v1.waterbodies import router as waterbodies_direct_router
 app.include_router(waterbodies_direct_router, prefix="/api")
+from app.api.v1.study_areas import router as study_areas_direct_router
+app.include_router(study_areas_direct_router, prefix="/api")
 
 @app.get("/health", tags=["Health"])
 @app.get(f"{settings.API_V1_PREFIX}/health", tags=["Health"])

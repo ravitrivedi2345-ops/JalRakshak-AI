@@ -101,7 +101,11 @@ export interface StudyAreaItem {
     waterbodies?: number;
     interventions?: number;
   };
+  waterbody_dataset_status?: "imported" | "not_imported";
+  has_ground_truth_records?: boolean;
+  last_updated?: string;
   has_boundary_geometry?: boolean;
   geometry?: any;
 }
+
 

@@ -73,11 +73,38 @@ def get_current_user_role(request: Request) -> str:
 @router.get("/summary")
 def get_waterbodies_summary(
     district: Optional[str] = "Patna",
+    study_area_id: Optional[str] = Query(None, description="Study area filter ID (e.g. 'patna-bihar', 'anantapur-arid-watershed')"),
     db: Session = Depends(get_db)
 ):
     """
     Return aggregate totals and counts by inspection status, priority, and waterbody type.
     """
+    if study_area_id and study_area_id.lower() not in ["patna-bihar", "patna", "all"]:
+        summary_data = {
+            "district": study_area_id,
+            "state": "",
+            "study_area_id": study_area_id,
+            "total_waterbodies": 0,
+            "by_status": {
+                "not_inspected": 0,
+                "pending": 0,
+                "verified": 0,
+                "action_required": 0,
+                "restoration_in_progress": 0,
+            },
+            "by_priority": {
+                "high": 0,
+                "medium": 0,
+                "low": 0,
+            },
+            "by_type": {},
+            "total_area_hectares": 0.0,
+            "verified_boundaries_count": 0,
+            "waterbody_dataset_status": "not_imported",
+            "message": "No verified waterbody records are available for this study area yet."
+        }
+        return create_success_response(data=summary_data, message="Study area summary fetched (0 records imported)")
+
     query = db.query(Waterbody)
     if district and district.lower() != "all":
         query = query.filter(Waterbody.district.ilike(f"%{district}%"))
@@ -126,12 +153,14 @@ def get_waterbodies_summary(
     summary_data = {
         "district": district or "Patna",
         "state": "Bihar",
+        "study_area_id": "patna-bihar",
         "total_waterbodies": len(waterbodies),
         "by_status": by_status,
         "by_priority": by_priority,
         "by_type": by_type,
         "total_area_hectares": round(total_area, 2),
         "verified_boundaries_count": verified_boundaries_count,
+        "waterbody_dataset_status": "imported",
     }
     return create_success_response(data=summary_data, message="Waterbody summary fetched successfully")
 
@@ -143,6 +172,7 @@ def list_waterbodies(
     priority: Optional[str] = Query(None, description="Filter by priority: low, medium, high"),
     waterbody_type: Optional[str] = Query(None, description="Filter by type: pond, lake, reservoir, wetland, tank"),
     district: Optional[str] = Query(None, description="Filter by district: e.g. Patna"),
+    study_area_id: Optional[str] = Query(None, description="Study area filter: patna-bihar, kolar-sub-basin, etc."),
     bbox: Optional[str] = Query(None, description="min_lon,min_lat,max_lon,max_lat bounding box"),
     sort_by: Optional[str] = Query("priority", description="Sort by name, last_inspected_at, priority, area_hectares"),
     sort_order: Optional[str] = Query("desc", description="Sort direction: asc or desc"),
@@ -152,8 +182,31 @@ def list_waterbodies(
     db: Session = Depends(get_db)
 ):
     """
-    Search and filter waterbodies in Patna, Bihar with pagination and optional GeoJSON export.
+    Search and filter waterbodies with pagination and optional GeoJSON export.
     """
+    if study_area_id and study_area_id.lower() not in ["patna-bihar", "patna", "all"]:
+        if format == "geojson":
+            return {
+                "type": "FeatureCollection",
+                "study_area_id": study_area_id,
+                "waterbody_dataset_status": "not_imported",
+                "features": []
+            }
+        return {
+            "success": True,
+            "data": {
+                "items": [],
+                "total": 0,
+                "page": page,
+                "limit": limit,
+                "total_pages": 0,
+                "study_area_id": study_area_id,
+                "waterbody_dataset_status": "not_imported",
+                "message": "No verified waterbody records are available for this study area yet."
+            },
+            "message": "No waterbodies found for selected study area"
+        }
+
     query = db.query(Waterbody)
 
     # Search filter

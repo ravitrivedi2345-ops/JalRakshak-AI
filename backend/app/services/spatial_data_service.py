@@ -1643,10 +1643,31 @@ def get_feature_details(feature_type: str, feature_id: str) -> Optional[Dict[str
 
 STUDY_AREAS_DATA: List[Dict[str, Any]] = [
     {
+        "id": "patna-bihar",
+        "name": "Patna, Bihar",
+        "aliases": ["Patna", "Patna Bihar", "Patna Pilot", "Lower Ganga", "Punpun Basin"],
+        "region": "Patna, Bihar",
+        "boundary_status": "verified",
+        "boundary_source": "Bihar Water Resources Department (WRD) & Survey of India",
+        "center": [85.1376, 25.5941],
+        "zoom": 12.0,
+        "bbox": [85.0000, 25.4800, 85.3800, 25.6800],
+        "area_sqkm": 320.5,
+        "purpose": "Ground-truth waterbody monitoring, urban wetlands, rejuvenation and Sentinel-2 change detection.",
+        "description": "Lower Ganga-Punpun floodplain pilot study area with 15 verified ground truth waterbody inspection sites.",
+        "disambiguation_notes": None,
+        "available_layers": ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds"],
+        "layer_counts": {"streams": 6, "waterbodies": 15, "interventions": 18},
+        "waterbody_dataset_status": "imported",
+        "has_ground_truth_records": True,
+        "last_updated": "2026-04-18",
+        "coordinates": [[[85.00, 25.50], [85.35, 25.48], [85.38, 25.66], [85.15, 25.68], [85.00, 25.62], [85.00, 25.50]]]
+    },
+    {
         "id": "kolar-sub-basin",
         "name": "Kolar Sub-Basin",
         "aliases": ["Kolar", "Kolar Sub Basin", "Kolar Watershed", "Kolar MP"],
-        "region": "Madhya Pradesh",
+        "region": "Madhya Pradesh, pending geographic verification",
         "boundary_status": "pending_verification",
         "boundary_source": "Central Ground Water Board (CGWB) & Narmada Basin Authority (Provisional)",
         "center": [77.10, 22.85],
@@ -1657,14 +1678,17 @@ STUDY_AREAS_DATA: List[Dict[str, Any]] = [
         "description": "Narmada tributary catchment in Sehore and Raisen districts feeding Kolar Dam. Requires administrator confirmation regarding disambiguation from Kolar, Karnataka.",
         "disambiguation_notes": "Identified as the Kolar River watershed (Narmada Basin, MP), not to be confused with Kolar District in Karnataka. Upload official SLUSI shapefile if alternate delineation is intended.",
         "available_layers": ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds"],
-        "layer_counts": {"streams": 8, "waterbodies": 4, "interventions": 12},
+        "layer_counts": {"streams": 8, "waterbodies": 0, "interventions": 12},
+        "waterbody_dataset_status": "not_imported",
+        "has_ground_truth_records": False,
+        "last_updated": "2026-04-10",
         "coordinates": [[[76.85, 22.65], [77.30, 22.65], [77.45, 22.95], [77.20, 23.10], [76.80, 22.95], [76.85, 22.65]]]
     },
     {
         "id": "raichur-tungabhadra-catchment",
         "name": "Raichur–Tungabhadra Catchment",
         "aliases": ["Raichur", "Tungabhadra Catchment", "Raichur Tungabhadra", "Tungabhadra Basin"],
-        "region": "Karnataka (extending across state boundaries)",
+        "region": "Karnataka and the relevant connected catchment",
         "boundary_status": "sample_curated",
         "boundary_source": "Krishna–Tungabhadra Basin Atlas & Karnataka WRD (Provisional Multi-State Boundary)",
         "center": [77.15, 15.95],
@@ -1675,7 +1699,10 @@ STUDY_AREAS_DATA: List[Dict[str, Any]] = [
         "description": "Semi-arid inter-state river confluence catchment between Tungabhadra and Krishna rivers, characterized by intense canal irrigation and gully erosion.",
         "disambiguation_notes": "Catchment extends across Raichur (Karnataka), Jogulamba Gadwal (Telangana) and Kurnool (Andhra Pradesh).",
         "available_layers": ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds", "interventions-recharge"],
-        "layer_counts": {"streams": 16, "waterbodies": 9, "interventions": 21},
+        "layer_counts": {"streams": 16, "waterbodies": 0, "interventions": 21},
+        "waterbody_dataset_status": "not_imported",
+        "has_ground_truth_records": False,
+        "last_updated": "2026-04-05",
         "coordinates": [[[76.50, 15.40], [77.20, 15.30], [77.65, 15.85], [77.50, 16.30], [76.80, 16.20], [76.50, 15.40]]]
     },
     {
@@ -1693,7 +1720,10 @@ STUDY_AREAS_DATA: List[Dict[str, Any]] = [
         "description": "Severely rain-shadowed drought-prone zone in southern AP with high subsurface infiltration potential and extensive farm pond construction programs.",
         "disambiguation_notes": None,
         "available_layers": ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-farmponds", "interventions-recharge"],
-        "layer_counts": {"streams": 11, "waterbodies": 6, "interventions": 24},
+        "layer_counts": {"streams": 11, "waterbodies": 0, "interventions": 24},
+        "waterbody_dataset_status": "not_imported",
+        "has_ground_truth_records": False,
+        "last_updated": "2026-04-12",
         "coordinates": [[[77.10, 14.20], [77.85, 14.15], [78.10, 14.90], [77.70, 15.15], [77.20, 14.85], [77.10, 14.20]]]
     },
     {
@@ -1711,7 +1741,10 @@ STUDY_AREAS_DATA: List[Dict[str, Any]] = [
         "description": "Hard-rock crystalline terrain spanning Jhansi, Lalitpur, Tikamgarh, and Mahoba prone to recurring agricultural droughts and seasonal stream desiccation.",
         "disambiguation_notes": None,
         "available_layers": ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds"],
-        "layer_counts": {"streams": 22, "waterbodies": 14, "interventions": 35},
+        "layer_counts": {"streams": 22, "waterbodies": 0, "interventions": 35},
+        "waterbody_dataset_status": "not_imported",
+        "has_ground_truth_records": False,
+        "last_updated": "2026-04-15",
         "coordinates": [[[78.60, 24.50], [79.80, 24.40], [80.40, 25.20], [79.90, 25.75], [78.75, 25.60], [78.60, 24.50]]]
     },
     {
@@ -1729,7 +1762,10 @@ STUDY_AREAS_DATA: List[Dict[str, Any]] = [
         "description": "Black-cotton basaltic plateau covering Nagpur, Wardha, and Chandrapur districts; focus area for farm percolation ponds and gully plugging.",
         "disambiguation_notes": "Wardha-Wainganga catchment delineation. Verify micro-watershed boundary against local Jalyukt Shivar GIS layers.",
         "available_layers": ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-checkdams", "interventions-farmponds"],
-        "layer_counts": {"streams": 19, "waterbodies": 11, "interventions": 28},
+        "layer_counts": {"streams": 19, "waterbodies": 0, "interventions": 28},
+        "waterbody_dataset_status": "not_imported",
+        "has_ground_truth_records": False,
+        "last_updated": "2026-04-08",
         "coordinates": [[[78.20, 20.20], [79.60, 20.10], [80.25, 21.10], [79.80, 21.65], [78.40, 21.40], [78.20, 20.20]]]
     },
     {
@@ -1747,14 +1783,17 @@ STUDY_AREAS_DATA: List[Dict[str, Any]] = [
         "description": "Hyper-arid dune landscape converted by the Indira Gandhi Canal network; exhibits acute seepage waterlogging and soil salinization requiring precise spatial monitoring.",
         "disambiguation_notes": None,
         "available_layers": ["boundary-watershed", "hydro-streams", "hydro-waterbodies", "interventions-farmponds"],
-        "layer_counts": {"streams": 7, "waterbodies": 5, "interventions": 16},
+        "layer_counts": {"streams": 7, "waterbodies": 0, "interventions": 16},
+        "waterbody_dataset_status": "not_imported",
+        "has_ground_truth_records": False,
+        "last_updated": "2026-04-14",
         "coordinates": [[[70.80, 26.90], [71.90, 26.60], [73.20, 28.20], [72.60, 28.80], [71.20, 27.90], [70.80, 26.90]]]
     }
 ]
 
 
 def get_study_areas_summary(query: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Return summary list of all 6 study areas with search filtering."""
+    """Return summary list of all 7 study areas with search filtering."""
     q = query.strip().lower() if query else ""
     results = []
     for item in STUDY_AREAS_DATA:
@@ -1780,6 +1819,9 @@ def get_study_areas_summary(query: Optional[str] = None) -> List[Dict[str, Any]]
             "disambiguation_notes": item["disambiguation_notes"],
             "available_layers": item["available_layers"],
             "layer_counts": item["layer_counts"],
+            "waterbody_dataset_status": item.get("waterbody_dataset_status", "not_imported"),
+            "has_ground_truth_records": item.get("has_ground_truth_records", False),
+            "last_updated": item.get("last_updated", "2026-04-15"),
             "has_boundary_geometry": bool(item.get("coordinates"))
         })
     return results
@@ -1816,7 +1858,10 @@ def get_study_area_geojson(study_area_id: str) -> Optional[Dict[str, Any]]:
             "description": target["description"],
             "disambiguation_notes": target["disambiguation_notes"],
             "available_layers": target["available_layers"],
-            "layer_counts": target["layer_counts"]
+            "layer_counts": target["layer_counts"],
+            "waterbody_dataset_status": target.get("waterbody_dataset_status", "not_imported"),
+            "has_ground_truth_records": target.get("has_ground_truth_records", False),
+            "last_updated": target.get("last_updated", "2026-04-15")
         },
         "geometry": {
             "type": "Polygon",

@@ -7,6 +7,15 @@ import {
   fetchWaterbodyHistory,
 } from "./api";
 import {
+  fetchStudyAreas,
+  fetchStudyAreaWaterbodies,
+  fetchStudyAreaSummary,
+  FALLBACK_STUDY_AREAS,
+} from "./map/mapApi";
+import type { StudyAreaItem } from "./map/mapTypes";
+import UploadBoundaryModal from "./map/UploadBoundaryModal";
+import ImportWaterbodiesModal from "./map/ImportWaterbodiesModal";
+import {
   type WaterbodyItem,
   type WaterbodyHistory,
   type WaterbodySummary,
@@ -27,6 +36,7 @@ import {
   HelpCircle,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
   X,
   Maximize2,
   Minimize2,
@@ -47,7 +57,10 @@ import {
   Sparkles,
   Eye,
   Database,
-  Satellite
+  Satellite,
+  Globe,
+  Upload,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -153,28 +166,94 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
   // Mapbox Token if configured
   const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
-  // 1. Fetch Waterbodies & Summary
-  const loadData = useCallback(async () => {
+  // Study Area State (Preset Watershed Study Areas)
+  const [studyAreas, setStudyAreas] = useState<StudyAreaItem[]>(FALLBACK_STUDY_AREAS);
+  const [selectedStudyArea, setSelectedStudyArea] = useState<StudyAreaItem>(FALLBACK_STUDY_AREAS[0]);
+  const [studyAreaSearchQuery, setStudyAreaSearchQuery] = useState<string>("");
+  const [isStudyAreaSelectorOpen, setIsStudyAreaSelectorOpen] = useState<boolean>(false);
+  const [uploadBoundaryModalOpen, setUploadBoundaryModalOpen] = useState<boolean>(false);
+  const [importWaterbodiesModalOpen, setImportWaterbodiesModalOpen] = useState<boolean>(false);
+  const selectorRef = useRef<HTMLDivElement | null>(null);
+
+  // Close study area selector when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
+        setIsStudyAreaSelectorOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // URL query parameter synchronization & initial study area loading
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const areaParam = urlParams.get("study_area");
+    if (areaParam) {
+      const match = FALLBACK_STUDY_AREAS.find((a) => a.id === areaParam);
+      if (match) setSelectedStudyArea(match);
+    }
+
+    fetchStudyAreas().then((areas) => {
+      if (areas && areas.length > 0) {
+        setStudyAreas(areas);
+        if (areaParam) {
+          const match = areas.find((a) => a.id === areaParam);
+          if (match) setSelectedStudyArea(match);
+        }
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Select study area and update URL query parameter without page reload
+  const handleSelectStudyArea = (area: StudyAreaItem) => {
+    setSelectedStudyArea(area);
+    setIsStudyAreaSelectorOpen(false);
+    setSelectedWaterbody(null);
+
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("study_area", area.id);
+      window.history.replaceState({}, "", url.toString());
+    } catch (e) {
+      console.error("Failed to update URL query param:", e);
+    }
+  };
+
+  // 1. Fetch Waterbodies & Summary for current study area
+  const loadData = useCallback(async (area: StudyAreaItem) => {
     setLoading(true);
     setError(null);
+    setSelectedWaterbody(null);
     try {
-      const [wbRes, sumRes] = await Promise.all([
-        fetchWaterbodies({ district: "Patna", limit: 100 }),
-        fetchWaterbodiesSummary("Patna"),
-      ]);
-      setWaterbodies(wbRes.items);
-      setSummary(sumRes);
+      if (area.id === "patna-bihar") {
+        const [wbRes, sumRes] = await Promise.all([
+          fetchWaterbodies({ district: "Patna", limit: 100 }),
+          fetchWaterbodiesSummary("Patna"),
+        ]);
+        setWaterbodies(wbRes.items);
+        setSummary(sumRes);
+      } else {
+        const [wbRes, sumRes] = await Promise.all([
+          fetchStudyAreaWaterbodies(area.id),
+          fetchStudyAreaSummary(area.id),
+        ]);
+        setWaterbodies(wbRes.items || []);
+        setSummary(sumRes);
+      }
     } catch (err: any) {
-      console.error("Failed to load Patna waterbodies:", err);
-      setError("Unable to retrieve live waterbody records from server. Fallback demo data loaded.");
+      console.error("Failed to load waterbodies:", err);
+      setError(`Unable to retrieve live waterbody records for ${area.name}. Check backend connection.`);
+      setWaterbodies([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    loadData(selectedStudyArea);
+  }, [selectedStudyArea, loadData]);
 
   // 2. Load History when selectedWaterbody changes
   useEffect(() => {
@@ -247,7 +326,85 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
     });
   }, [waterbodies, searchQuery, selectedStatus, selectedPriority, selectedType, sortBy]);
 
-  // 4. Initialize MapLibre GL Map centered on Patna
+  // 4. Boundary visualization and fitBounds for selected study area
+  const updateMapBoundary = useCallback((map: MapLibreMap, area: StudyAreaItem) => {
+    if (!map || !map.isStyleLoaded()) return;
+
+    if (area.geometry && area.geometry.coordinates) {
+      const geojsonData: any = {
+        type: "Feature",
+        properties: { id: area.id, name: area.name, status: area.boundary_status },
+        geometry: area.geometry,
+      };
+
+      if (map.getSource("study-area-boundary-poly")) {
+        (map.getSource("study-area-boundary-poly") as any).setData(geojsonData);
+      } else {
+        map.addSource("study-area-boundary-poly", {
+          type: "geojson",
+          data: geojsonData,
+        });
+
+        map.addLayer({
+          id: "study-area-boundary-fill",
+          type: "fill",
+          source: "study-area-boundary-poly",
+          paint: {
+            "fill-color": "#0d9488",
+            "fill-opacity": 0.12,
+          },
+        });
+
+        map.addLayer({
+          id: "study-area-boundary-outline",
+          type: "line",
+          source: "study-area-boundary-poly",
+          paint: {
+            "line-color": "#14b8a6",
+            "line-width": 2.5,
+            "line-dasharray": [2, 2],
+          },
+        });
+      }
+
+      if (area.bbox && area.bbox.length === 4) {
+        map.fitBounds(
+          [[area.bbox[0], area.bbox[1]], [area.bbox[2], area.bbox[3]]],
+          {
+            padding: { top: 60, bottom: 60, left: sidebarOpen ? 380 : 60, right: 60 },
+            duration: 1200,
+          }
+        );
+      } else {
+        map.flyTo({
+          center: area.center as [number, number],
+          zoom: area.zoom || 10,
+          speed: 1.2,
+        });
+      }
+    } else {
+      // Clear boundary source if present
+      if (map.getSource("study-area-boundary-poly")) {
+        (map.getSource("study-area-boundary-poly") as any).setData({
+          type: "FeatureCollection",
+          features: [],
+        });
+      }
+      map.flyTo({
+        center: area.center as [number, number],
+        zoom: area.zoom || 9,
+        speed: 1.2,
+      });
+    }
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (mapRef.current) {
+      updateMapBoundary(mapRef.current, selectedStudyArea);
+    }
+  }, [selectedStudyArea, updateMapBoundary]);
+
+  // 5. Initialize MapLibre GL Map
   useEffect(() => {
     let mapInstance: MapLibreMap | null = null;
     let isDisposed = false;
@@ -295,9 +452,9 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
       mapInstance = new Map({
         container: mapContainerRef.current,
         style: styleSpec,
-        center: PATNA_CENTER,
-        zoom: 12.2,
-        minZoom: 10,
+        center: selectedStudyArea.center as [number, number] || PATNA_CENTER,
+        zoom: selectedStudyArea.zoom || 12.0,
+        minZoom: 4,
         maxZoom: 18,
         attributionControl: false,
       });
@@ -308,6 +465,7 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
       mapInstance.on("load", () => {
         if (isDisposed || !mapInstance) return;
         mapRef.current = mapInstance;
+        updateMapBoundary(mapInstance, selectedStudyArea);
         renderMapFeatures(mapInstance, filteredWaterbodies);
       });
     }
@@ -518,60 +676,237 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
     }
   };
 
-  // Re-center on Patna
+  // Map actions
   const handleResetMap = () => {
     if (mapRef.current) {
+      updateMapBoundary(mapRef.current, selectedStudyArea);
+    }
+  };
+
+  const handleShowAllStudyAreas = () => {
+    if (mapRef.current) {
       mapRef.current.flyTo({
-        center: PATNA_CENTER,
-        zoom: 12.2,
+        center: [78.9629, 22.5937],
+        zoom: 4.5,
         speed: 1.2,
       });
     }
   };
 
+  const handleViewOnMap = () => {
+    if (mapRef.current) {
+      updateMapBoundary(mapRef.current, selectedStudyArea);
+    }
+  };
+
+  // Filter study areas by search query (name, region, aliases)
+  const filteredStudyAreas = useMemo(() => {
+    if (!studyAreaSearchQuery.trim()) return studyAreas;
+    const q = studyAreaSearchQuery.toLowerCase().trim();
+    return studyAreas.filter((a) => {
+      const matchName = a.name.toLowerCase().includes(q);
+      const matchRegion = a.region.toLowerCase().includes(q);
+      const matchAlias = a.aliases?.some((al) => al.toLowerCase().includes(q));
+      return matchName || matchRegion || matchAlias;
+    });
+  }, [studyAreas, studyAreaSearchQuery]);
+
   return (
     <div className="relative flex flex-col h-screen w-full bg-slate-950 text-slate-100 overflow-hidden font-sans">
       {/* ── Top Navigation Bar ────────────────────────────────────────────── */}
-      <header className="z-20 flex items-center justify-between px-4 py-2.5 bg-slate-900/95 border-b border-slate-800 backdrop-blur-md shadow-lg shrink-0">
-        <div className="flex items-center gap-3">
+      <header className="z-20 flex flex-wrap items-center justify-between px-3 sm:px-4 py-2 bg-slate-900/95 border-b border-slate-800 backdrop-blur-md shadow-lg shrink-0 gap-2">
+        {/* Left: Branding & Subtitle */}
+        <div className="flex items-center gap-2.5">
           {onBackToDashboard && (
             <button
               onClick={onBackToDashboard}
-              className="px-2.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition flex items-center gap-1.5"
+              className="px-2 py-1 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition flex items-center gap-1"
             >
-              <ChevronLeft size={15} /> Dashboard
+              <ChevronLeft size={14} /> <span className="hidden sm:inline">Dashboard</span>
             </button>
           )}
 
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-gradient-to-tr from-cyan-500 to-teal-400 rounded-lg shadow-md shadow-cyan-500/20 text-slate-950 font-bold">
-              <Waves size={18} />
+            <div className="p-1.5 bg-gradient-to-tr from-cyan-500 to-teal-400 rounded-lg shadow-md shadow-cyan-500/20 text-slate-950 font-bold shrink-0">
+              <Waves size={16} />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-sm md:text-base font-bold tracking-tight text-white">
+                <h1 className="text-sm font-bold tracking-tight text-white leading-tight">
                   Waterbody Explorer
                 </h1>
-                <span className="px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase bg-cyan-950 text-cyan-400 border border-cyan-800/80 rounded-full">
-                  Patna, Bihar
-                </span>
-                <span className="hidden sm:inline-flex px-1.5 py-0.5 text-[10px] font-mono bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 rounded">
-                  15 Ground Truth Sites
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <span className="font-semibold text-cyan-400">{selectedStudyArea.name}</span>
+                <span>·</span>
+                <span className="text-slate-300 font-mono text-[10px]">
+                  {selectedStudyArea.id === "patna-bihar"
+                    ? "15 Ground Truth Sites"
+                    : selectedStudyArea.waterbody_dataset_status === "imported"
+                    ? `${waterbodies.length} Sites`
+                    : selectedStudyArea.boundary_status === "verified"
+                    ? "Verified Boundary · Pending Records"
+                    : "Boundary Pending Verification"}
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Center / Right stats & quick actions */}
-        <div className="flex items-center gap-2">
+        {/* Center / Study Area Controls: Search or select study area, View on Map, Reset Map */}
+        <div className="flex items-center gap-1.5 order-3 sm:order-2">
+          {/* Searchable Watershed Study Area Selector Dropdown */}
+          <div className="relative" ref={selectorRef}>
+            <button
+              onClick={() => setIsStudyAreaSelectorOpen(!isStudyAreaSelectorOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/95 hover:bg-slate-750 text-slate-100 border border-slate-700 hover:border-cyan-500/60 rounded-lg text-xs font-medium transition shadow-sm"
+              title="Select watershed study area"
+            >
+              <Globe size={14} className="text-cyan-400 shrink-0" />
+              <span className="font-semibold truncate max-w-[120px] sm:max-w-[180px]">
+                {selectedStudyArea.name}
+              </span>
+              <ChevronDown
+                size={14}
+                className={`text-slate-400 shrink-0 transition-transform duration-200 ${
+                  isStudyAreaSelectorOpen ? "rotate-180 text-cyan-400" : ""
+                }`}
+              />
+            </button>
+
+            {/* Dropdown Popover */}
+            {isStudyAreaSelectorOpen && (
+              <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 w-80 sm:w-96 bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl backdrop-blur-xl z-50 overflow-hidden text-xs animate-in fade-in zoom-in-95 duration-150">
+                <div className="p-2.5 border-b border-slate-800 bg-slate-950/80">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 text-slate-400" size={14} />
+                    <input
+                      type="text"
+                      autoFocus
+                      value={studyAreaSearchQuery}
+                      onChange={(e) => setStudyAreaSearchQuery(e.target.value)}
+                      placeholder="Search study area or alias (e.g. Kolar, Thar, Vidarbha)..."
+                      className="w-full pl-8 pr-7 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 text-xs"
+                    />
+                    {studyAreaSearchQuery && (
+                      <button
+                        onClick={() => setStudyAreaSearchQuery("")}
+                        className="absolute right-2 top-2 text-slate-400 hover:text-white"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2 px-0.5">
+                    <span>7 Predefined Watershed Study Areas</span>
+                    <span>{filteredStudyAreas.length} matching</span>
+                  </div>
+                </div>
+
+                <div className="max-h-72 overflow-y-auto divide-y divide-slate-800/60 p-1">
+                  {filteredStudyAreas.length === 0 ? (
+                    <div className="py-6 text-center text-slate-400 text-xs">
+                      No study areas match "{studyAreaSearchQuery}".
+                    </div>
+                  ) : (
+                    filteredStudyAreas.map((area) => {
+                      const isSelected = selectedStudyArea.id === area.id;
+                      return (
+                        <div
+                          key={area.id}
+                          onClick={() => handleSelectStudyArea(area)}
+                          className={`p-2.5 rounded-lg cursor-pointer transition flex flex-col gap-1 ${
+                            isSelected
+                              ? "bg-cyan-950/50 border border-cyan-500/60 shadow-sm"
+                              : "hover:bg-slate-800/70 border border-transparent"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="font-bold text-white text-xs flex items-center gap-1.5">
+                              {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />}
+                              {area.name}
+                            </span>
+                            <span
+                              className={`text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded border ${
+                                area.boundary_status === "verified"
+                                  ? "bg-emerald-950 text-emerald-300 border-emerald-800"
+                                  : area.boundary_status === "sample_curated"
+                                  ? "bg-cyan-950 text-cyan-300 border-cyan-800"
+                                  : "bg-amber-950 text-amber-300 border-amber-800"
+                              }`}
+                            >
+                              {area.boundary_status.replace(/_/g, " ")}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] text-slate-400">
+                            <span className="truncate">{area.region}</span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {area.id === "patna-bihar"
+                                ? "15 Ground Truth Sites"
+                                : area.waterbody_dataset_status === "imported"
+                                ? "Imported"
+                                : "Not Imported"}
+                            </span>
+                          </div>
+
+                          {area.disambiguation_notes && (
+                            <div className="text-[10px] text-amber-300/80 bg-amber-950/30 px-1.5 py-0.5 rounded border border-amber-900/40 line-clamp-1">
+                              {area.disambiguation_notes}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="p-2 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-[11px]">
+                  <button
+                    onClick={() => {
+                      setIsStudyAreaSelectorOpen(false);
+                      handleShowAllStudyAreas();
+                    }}
+                    className="text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1"
+                  >
+                    <Globe size={12} /> Show All Study Areas (Pan-India)
+                  </button>
+                  <span className="text-slate-500 text-[10px]">JalRakshak GIS</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* View on Map */}
+          <button
+            onClick={handleViewOnMap}
+            title="View selected study area on map"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition"
+          >
+            <MapPin size={13} className="text-cyan-400" />
+            <span className="hidden sm:inline">View on Map</span>
+          </button>
+
+          {/* Reset Map */}
+          <button
+            onClick={handleResetMap}
+            title="Reset map to current study area boundary"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition"
+          >
+            <Compass size={13} className="text-slate-400 hover:text-cyan-400" />
+            <span className="hidden sm:inline">Reset Map</span>
+          </button>
+        </div>
+
+        {/* Right: Basemap Switcher & Filters Toggle */}
+        <div className="flex items-center gap-2 order-2 sm:order-3 ml-auto sm:ml-0">
           {/* Basemap switcher */}
           <div className="hidden lg:flex items-center bg-slate-800/90 rounded-lg p-0.5 border border-slate-700 text-xs">
             {(["satellite", "streets", "topo", "dark"] as const).map((style) => (
               <button
                 key={style}
                 onClick={() => setMapStyle(style)}
-                className={`px-2.5 py-1 rounded-md capitalize transition font-medium ${
+                className={`px-2 py-1 rounded-md capitalize transition font-medium text-[11px] ${
                   mapStyle === style
                     ? "bg-cyan-600 text-white shadow-sm"
                     : "text-slate-400 hover:text-slate-200"
@@ -583,14 +918,6 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
           </div>
 
           <button
-            onClick={handleResetMap}
-            title="Reset Map to Patna"
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
-          >
-            <Compass size={18} />
-          </button>
-
-          <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className={`p-1.5 rounded-lg border transition flex items-center gap-1 text-xs font-medium ${
               sidebarOpen
@@ -598,7 +925,7 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
                 : "bg-slate-900 text-slate-300 border-slate-700"
             }`}
           >
-            <SlidersHorizontal size={16} />
+            <SlidersHorizontal size={15} />
             <span className="hidden sm:inline">{sidebarOpen ? "Hide Filter" : "Filters"}</span>
           </button>
         </div>
@@ -697,7 +1024,7 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
           </div>
 
           {/* Summary KPIs banner */}
-          {summary && (
+          {summary && summary.total_waterbodies > 0 ? (
             <div className="px-3 py-2 bg-slate-950/40 border-b border-slate-800/80 grid grid-cols-4 gap-1.5 text-center shrink-0">
               <div className="p-1 rounded bg-slate-800/50">
                 <div className="text-[10px] text-slate-400">Total</div>
@@ -716,6 +1043,26 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
                 <div className="text-xs font-bold text-emerald-300">{summary.by_status.verified || 0}</div>
               </div>
             </div>
+          ) : (
+            <div className="px-3 py-2 bg-slate-950/60 border-b border-slate-800/80 flex items-center justify-between text-xs shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-400">Boundary:</span>
+                <span
+                  className={`text-[9.5px] uppercase font-semibold px-2 py-0.5 rounded border ${
+                    selectedStudyArea.boundary_status === "verified"
+                      ? "bg-emerald-950/80 text-emerald-300 border-emerald-800/80"
+                      : selectedStudyArea.boundary_status === "sample_curated"
+                      ? "bg-cyan-950/80 text-cyan-300 border-cyan-800/80"
+                      : "bg-amber-950/80 text-amber-300 border-amber-800/80"
+                  }`}
+                >
+                  {selectedStudyArea.boundary_status.replace(/_/g, " ")}
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40">
+                Records: Not Imported
+              </span>
+            </div>
           )}
 
           {/* Waterbodies Scrollable List */}
@@ -723,24 +1070,107 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
             {loading ? (
               <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
                 <RefreshCw className="animate-spin text-cyan-400" size={24} />
-                <span className="text-xs">Loading Patna waterbody inventory...</span>
+                <span className="text-xs">Loading {selectedStudyArea.name} inventory...</span>
               </div>
             ) : filteredWaterbodies.length === 0 ? (
-              <div className="py-12 px-4 text-center text-slate-400">
-                <HelpCircle className="mx-auto mb-2 text-slate-500" size={28} />
-                <p className="text-xs font-semibold text-slate-300">No matching waterbodies</p>
-                <p className="text-[11px] text-slate-500 mt-1">Try adjusting your search terms or status filters.</p>
-                <button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setSelectedStatus("all");
-                    setSelectedPriority("all");
-                  }}
-                  className="mt-3 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs rounded-md text-cyan-400"
-                >
-                  Reset Filters
-                </button>
-              </div>
+              waterbodies.length > 0 ? (
+                /* Filtered to zero in Patna */
+                <div className="py-12 px-4 text-center text-slate-400">
+                  <HelpCircle className="mx-auto mb-2 text-slate-500" size={28} />
+                  <p className="text-xs font-semibold text-slate-300">No matching waterbodies</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Try adjusting your search terms or status filters.</p>
+                  <button
+                    onClick={() => {
+                      setSearchQuery("");
+                      setSelectedStatus("all");
+                      setSelectedPriority("all");
+                      setSelectedType("all");
+                    }}
+                    className="mt-3 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs rounded-md text-cyan-400"
+                  >
+                    Reset Filters
+                  </button>
+                </div>
+              ) : (
+                /* Area without imported waterbody records (Requirement Section 4 & 8) */
+                <div className="py-4 px-2 space-y-3">
+                  <div className="p-3 bg-amber-950/30 border border-amber-800/50 rounded-xl space-y-2 text-left">
+                    <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-xs">
+                      <AlertTriangle size={15} className="shrink-0" />
+                      <span>Dataset Status: Pending Field Verification</span>
+                    </div>
+                    <p className="text-slate-200 text-xs font-semibold leading-snug">
+                      "No verified waterbody records are available for this study area yet."
+                    </p>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Do not confuse 'no data available' with 'zero waterbodies exist.' Verified ground surveys, water quality tests, and satellite-delineated waterbody records for <strong>{selectedStudyArea.name}</strong> ({selectedStudyArea.region}) have not yet been imported into the database.
+                    </p>
+                  </div>
+
+                  {/* Study Area Profile Card */}
+                  <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl text-left space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white text-[12px]">{selectedStudyArea.name}</span>
+                      <span
+                        className={`text-[9.5px] uppercase font-semibold px-2 py-0.5 rounded border ${
+                          selectedStudyArea.boundary_status === "verified"
+                            ? "bg-emerald-950/80 text-emerald-300 border-emerald-800/80"
+                            : selectedStudyArea.boundary_status === "sample_curated"
+                            ? "bg-cyan-950/80 text-cyan-300 border-cyan-800/80"
+                            : "bg-amber-950/80 text-amber-300 border-amber-800/80"
+                        }`}
+                      >
+                        {selectedStudyArea.boundary_status.replace(/_/g, " ")}
+                      </span>
+                    </div>
+
+                    <div className="text-[11px] text-slate-400">
+                      <span className="text-slate-500 font-medium">Region:</span> {selectedStudyArea.region}
+                    </div>
+                    {selectedStudyArea.area_sqkm && (
+                      <div className="text-[11px] text-slate-400">
+                        <span className="text-slate-500 font-medium">Catchment Extent:</span>{" "}
+                        <span className="text-cyan-300 font-mono font-medium">
+                          {selectedStudyArea.area_sqkm.toLocaleString()} sq km
+                        </span>
+                      </div>
+                    )}
+                    <div className="text-[11px] text-slate-400">
+                      <span className="text-slate-500 font-medium">Boundary Source:</span>{" "}
+                      <span className="text-slate-300">
+                        {selectedStudyArea.boundary_source || "Boundary data unavailable"}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      <span className="text-slate-500 font-medium">Hydrological Focus:</span>{" "}
+                      <span className="text-slate-300">{selectedStudyArea.purpose}</span>
+                    </div>
+
+                    {selectedStudyArea.disambiguation_notes && (
+                      <div className="p-2 bg-slate-900/90 border border-amber-800/40 rounded text-[10.5px] text-amber-200/90 leading-relaxed">
+                        <strong className="text-amber-300 block mb-0.5">Geographic Disambiguation:</strong>
+                        {selectedStudyArea.disambiguation_notes}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Admin Workflows to Import Data or Upload Boundary */}
+                  <div className="space-y-2 pt-1">
+                    <button
+                      onClick={() => setImportWaterbodiesModalOpen(true)}
+                      className="w-full py-2 px-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-md shadow-cyan-950/40 transition"
+                    >
+                      <FileSpreadsheet size={15} /> Import GeoJSON / CSV Data
+                    </button>
+                    <button
+                      onClick={() => setUploadBoundaryModalOpen(true)}
+                      className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition"
+                    >
+                      <Upload size={14} /> Upload / Verify Boundary
+                    </button>
+                  </div>
+                </div>
+              )
             ) : (
               filteredWaterbodies.map((wb) => {
                 const statusConfig = STATUS_CONFIG[wb.inspection_status];
@@ -813,9 +1243,9 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
 
           {/* Sidebar Footer info */}
           <div className="p-2.5 bg-slate-950 border-t border-slate-800 text-[10px] text-slate-500 flex items-center justify-between">
-            <span>Patna Municipal & Wetland GIS</span>
-            <span className="text-cyan-400 flex items-center gap-1">
-              <Database size={11} /> Live Vector GIS
+            <span className="truncate max-w-[200px]">{selectedStudyArea.name} · {selectedStudyArea.region}</span>
+            <span className="text-cyan-400 flex items-center gap-1 shrink-0">
+              <Database size={11} /> {selectedStudyArea.boundary_status === "verified" ? "Verified GIS" : "Provisional Extent"}
             </span>
           </div>
         </aside>
@@ -1269,6 +1699,35 @@ export default function WaterbodyExplorer({ onBackToDashboard, onLaunchChangeDet
           </aside>
         )}
       </div>
+
+      {/* ── Modals for Boundary Upload & Waterbody Data Import ─────────────── */}
+      <UploadBoundaryModal
+        isOpen={uploadBoundaryModalOpen}
+        studyAreaId={selectedStudyArea.id}
+        studyAreaName={selectedStudyArea.name}
+        onClose={() => setUploadBoundaryModalOpen(false)}
+        onSuccess={(updatedFeature) => {
+          setUploadBoundaryModalOpen(false);
+          setSelectedStudyArea((prev) => ({
+            ...prev,
+            boundary_status: "verified",
+            boundary_source: updatedFeature?.properties?.boundary_source || "Official Admin Shapefile",
+            has_boundary_geometry: true,
+            geometry: updatedFeature?.geometry,
+          }));
+        }}
+      />
+
+      <ImportWaterbodiesModal
+        isOpen={importWaterbodiesModalOpen}
+        studyAreaId={selectedStudyArea.id}
+        studyAreaName={selectedStudyArea.name}
+        onClose={() => setImportWaterbodiesModalOpen(false)}
+        onSuccess={(_count) => {
+          setImportWaterbodiesModalOpen(false);
+          loadData(selectedStudyArea);
+        }}
+      />
     </div>
   );
 }
