@@ -6,12 +6,9 @@ _INSECURE_DEFAULT_KEY = "jalrakshak_super_secret_jwt_key_2026_change_in_producti
 
 class Settings(BaseSettings):
     APP_NAME: str = "JalRakshak AI Backend"
-    # Set APP_ENV=production in Vercel environment variables
-    APP_ENV: str = "production"
+    APP_ENV: str = "development"
     API_V1_PREFIX: str = "/api/v1"
 
-    # For Vercel: set DATABASE_URL to your PostgreSQL connection string.
-    # Vercel filesystem is read-only; SQLite is only for local dev.
     DATABASE_URL: str = "sqlite:///./jalrakshak.db"
 
     # IMPORTANT: Always override JWT_SECRET_KEY via environment variable in production.
@@ -19,12 +16,11 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 120
 
-    # Set FRONTEND_ORIGINS to your actual Vercel deployment URL
-    FRONTEND_ORIGINS: str = "http://localhost:5173,http://localhost:8443,http://127.0.0.1:8443,http://localhost:3000,https://*.vercel.app"
+    # Allowed CORS Origins for Frontend
+    FRONTEND_ORIGINS: str = "http://localhost:5173,http://localhost:8443,http://127.0.0.1:8443,http://localhost:3000,https://*.onrender.com"
 
-    # Vercel only allows writes to /tmp — set these in production env vars
-    UPLOAD_DIR: str = "/tmp/uploads"
-    OUTPUT_DIR: str = "/tmp/outputs"
+    UPLOAD_DIR: str = "./storage/uploads"
+    OUTPUT_DIR: str = "./storage/outputs"
     MAX_UPLOAD_SIZE_MB: int = 15
 
     REDIS_URL: str = "redis://localhost:6379/0"

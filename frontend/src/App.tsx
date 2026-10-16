@@ -96,7 +96,6 @@ type Icon = ComponentType<{ size?: number; strokeWidth?: number; className?: str
 const DemoIndexChart = lazy(() => import("./DemoIndexChart"));
 const WaterbodyExplorer = lazy(() => import("./WaterbodyExplorer"));
 const SatelliteChangeDetection = lazy(() => import("./SatelliteChangeDetection"));
-const MapExplorer = lazy(() => import("./map/MapExplorer"));
 import {
   fetchAdministrativeBoundaries,
   fetchWatershedBoundaries,
@@ -104,6 +103,7 @@ import {
   fetchInterventions as fetchGisInterventions,
   searchMapFeatures,
 } from "./map/mapApi";
+
 
 
 type Site = {

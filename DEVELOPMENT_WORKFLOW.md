@@ -9,7 +9,7 @@ This document establishes the safe software development life cycle (SDLC) for **
 ```mermaid
 graph TD
     Main[main Branch - Live Production] -->|Deploy on Approval| Prod[Production Live URL]
-    Dev[feature-development Branch] -->|Auto CI Check| Preview[Vercel / Render Preview Deployments]
+    Dev[feature-development Branch] -->|Auto CI Check| Preview[Render / Cloud Preview Deployments]
     Feature[feature/* Local Branches] -->|PR Review| Dev
     Dev -->|Production Release PR| Main
 ```
@@ -35,7 +35,7 @@ graph TD
    - **NEVER** run developmental database resets, drop tables, or destructive migrations against the live production database.
 
 3. **Secrets & Environment Isolation:**
-   - Production API keys, JWT secrets, database connection strings, and satellite credentials reside strictly in cloud environment variables (e.g. Vercel / Render Dashboard).
+   - Production API keys, JWT secrets, database connection strings, and satellite credentials reside strictly in cloud environment variables (e.g. Render Dashboard).
    - Development variables are stored in local `.env` files (ignored by Git via `.gitignore`).
    - `.env.example` templates contain non-sensitive sample keys.
 
@@ -43,7 +43,7 @@ graph TD
 
 ## 3. Deployment Configuration Best Practices
 
-### Frontend Deployment (e.g., Vercel / Netlify)
+### Frontend Deployment (e.g., Render / Cloud Hosting)
 - **Production Branch:** Set to `main`.
 - **Preview Deployments:** Enable automatic Preview Deployments for `feature-development` and all Pull Requests.
 - **Environment Variables:**

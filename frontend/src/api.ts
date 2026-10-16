@@ -72,9 +72,9 @@ export type SearchResponse = {
   watersheds: { id: string; name: string }[];
 };
 
-// On Vercel: VITE_API_BASE_URL is injected by the service binding from the backend service.
+// In production: VITE_API_BASE_URL is configured via environment variables.
 // Locally: set VITE_API_BASE_URL=http://localhost:8000 in frontend/.env
-// Fallback to "" means all /api/... calls go to the same origin (works on Vercel same-domain rewrites)
+// Fallback to "" routes /api/... to the current origin host
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 
 export const apiClient = axios.create({
